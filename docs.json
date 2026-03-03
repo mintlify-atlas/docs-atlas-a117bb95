@@ -65,25 +65,18 @@
         "tab": "API Reference",
         "groups": [
           {
-            "group": "Components",
+            "group": "Editor Component",
             "pages": [
               "api/editor"
             ]
           },
           {
-            "group": "Extensions",
+            "group": "Built-in Extensions",
             "pages": [
               "api/extensions/slash-command",
               "api/extensions/image-upload",
               "api/extensions/drag-and-drop",
               "api/extensions/custom-keymap"
-            ]
-          },
-          {
-            "group": "Utilities",
-            "pages": [
-              "api/hooks",
-              "api/utils"
             ]
           }
         ]

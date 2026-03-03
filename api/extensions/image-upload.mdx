@@ -128,16 +128,24 @@ Users can drag and drop images from their file system:
 
 ### Programmatic Upload
 
-You can trigger image upload programmatically:
+Image uploads are triggered automatically by drag-and-drop or paste. The `startImageUpload` function is internal and not exported from the package.
+
+If you need custom upload behavior, you can access the editor instance and insert images manually:
 
 ```typescript
-import { startImageUpload } from "novel";
-import { EditorView } from "@tiptap/pm/view";
+import { Editor } from "novel";
 
-function uploadImage(file: File, view: EditorView) {
-  const pos = view.state.selection.from;
-  startImageUpload(file, view, pos);
+function MyComponent() {
+  const [editor, setEditor] = React.useState(null);
+  
+  return (
+    <Editor 
+      onUpdate={(e) => setEditor(e)}
+    />
+  );
 }
+
+// Then use editor.commands.setImage() to insert images
 ```
 
 ## Upload Endpoint

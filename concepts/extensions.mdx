@@ -13,18 +13,21 @@ Novel is built on [Tiptap](https://tiptap.dev/), which has a robust extension ec
 
 ## Default Extensions
 
-The `defaultExtensions` array (defined in `packages/core/src/ui/editor/extensions/index.tsx`) includes 15+ extensions that work together:
+Novel includes 15+ built-in extensions (defined internally in `packages/core/src/ui/editor/extensions/index.tsx`) that work together automatically:
 
 ```tsx
-import { defaultExtensions } from "novel";
 import { Editor } from "novel";
 
-// Extensions are automatically included
+// All default extensions are automatically included
 <Editor />
 
-// Or combine with your own
-<Editor extensions={[...defaultExtensions, MyCustomExtension]} />
+// Add your custom extensions on top of the defaults
+<Editor extensions={[MyCustomExtension]} />
 ```
+
+<Note>
+The `defaultExtensions` array is not exported from the package. Novel automatically includes all default extensions, and any extensions you pass via the `extensions` prop are added on top of them.
+</Note>
 
 ### Core Extensions
 
@@ -331,35 +334,39 @@ function MyEditor() {
 ```
 
 <Warning>
-Extensions are merged as `[...defaultExtensions, ...extensions]`. If you pass an extension with the same name as a default, the default takes precedence. To override, you must filter out the default extension first.
+Extensions are merged internally as `[...defaultExtensions, ...extensions]`. Your custom extensions are added after the defaults. If you need to override a default extension's behavior, create a custom extension with the same name and higher priority - Tiptap will use your version instead.
 </Warning>
 
 ### Overriding Default Extensions
 
-If you need to replace a default extension:
+Since `defaultExtensions` is not exported, you cannot filter them directly. Instead, override by priority:
 
 ```tsx
-import { Editor, defaultExtensions } from "novel";
-import CustomLink from "./custom-link";
+import { Editor } from "novel";
+import Link from "@tiptap/extension-link";
 
-const filteredExtensions = defaultExtensions.filter(
-  (ext) => ext.name !== "link"
-);
+// Create a custom link extension with higher priority
+const CustomLink = Link.extend({
+  priority: 1000, // Higher than default (100)
+  // Your customizations
+});
 
 function MyEditor() {
   return (
     <Editor
-      extensions={[...filteredExtensions, CustomLink]}
+      extensions={[CustomLink]}
     />
   );
 }
 ```
 
+Tiptap will use the extension with the highest priority when multiple extensions have the same name.
+
 ## Extension Configuration Deep Dive
 
 ### How Extensions Are Merged
 
-From `index.tsx:99`:
+Internally, Novel merges extensions (from `index.tsx:99`):
 
 ```tsx
 const editor = useEditor({
@@ -368,7 +375,7 @@ const editor = useEditor({
 });
 ```
 
-The spread operator creates a new array with defaults first, then your customs. Tiptap processes them in order.
+Novel's default extensions are loaded first, then your custom extensions are added. Tiptap processes them in order, with priority determining precedence for extensions with duplicate names.
 
 ### Extension Priority
 
