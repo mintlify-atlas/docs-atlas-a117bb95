@@ -1,0 +1,362 @@
+---
+title: AI Integration
+description: Set up AI-powered autocomplete in Novel using OpenAI or other providers
+---
+
+Novel includes built-in AI autocomplete functionality that can be triggered by typing `++` in the editor. This guide shows you how to set up the AI API endpoint and customize the AI behavior.
+
+## Quick Start
+
+Novel uses the Vercel AI SDK under the hood for streaming AI completions.
+
+<Steps>
+
+### Step 1: Install Dependencies
+
+```bash
+npm install ai openai
+```
+
+### Step 2: Create API Route
+
+Create an API route at `/api/generate/route.ts`:
+
+```ts
+import OpenAI from "openai";
+import { OpenAIStream, StreamingTextResponse } from "ai";
+
+// Create an OpenAI API client (edge-friendly)
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "",
+});
+
+// IMPORTANT! Set the runtime to edge
+export const runtime = "edge";
+
+export async function POST(req: Request): Promise<Response> {
+  // Check if the OPENAI_API_KEY is set
+  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "") {
+    return new Response(
+      "Missing OPENAI_API_KEY – make sure to add it to your .env file.",
+      {
+        status: 400,
+      },
+    );
+  }
+
+  let { prompt } = await req.json();
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an AI writing assistant that continues existing text based on context from prior text. " +
+          "Give more weight/priority to the later characters than the beginning ones. " +
+          "Limit your response to no more than 200 characters, but make sure to construct complete sentences.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.7,
+    top_p: 1,
+    frequency_penalty: 0,
+    presence_penalty: 0,
+    stream: true,
+    n: 1,
+  });
+
+  // Convert the response into a friendly text-stream
+  const stream = OpenAIStream(response);
+
+  // Respond with the stream
+  return new StreamingTextResponse(stream);
+}
+```
+
+### Step 3: Add Environment Variable
+
+Add your OpenAI API key to `.env.local`:
+
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+### Step 4: Use the Editor
+
+The editor will automatically use the `/api/generate` endpoint:
+
+```tsx
+import { Editor } from "novel";
+
+export default function MyEditor() {
+  return <Editor />;
+}
+```
+
+</Steps>
+
+## Custom API Endpoint
+
+If you want to use a different API endpoint, pass it to the `completionApi` prop:
+
+```tsx
+<Editor completionApi="/api/custom-generate" />
+```
+
+## How AI Autocomplete Works
+
+<Steps>
+
+### Trigger
+
+When a user types `++`, the editor:
+1. Deletes the `++` characters
+2. Grabs the previous 5000 characters
+3. Sends them to the completion API
+4. Streams the response back
+
+### Response Handling
+
+The completion is inserted character by character as it streams:
+
+```tsx
+const { complete, completion, isLoading, stop } = useCompletion({
+  id: "novel",
+  api: completionApi,
+  onFinish: (_prompt, completion) => {
+    editor?.commands.setTextSelection({
+      from: editor.state.selection.from - completion.length,
+      to: editor.state.selection.from,
+    });
+  },
+  onError: (err) => {
+    toast.error(err.message);
+  },
+});
+```
+
+### Cancellation
+
+Users can cancel AI generation by:
+- Pressing `Escape` (deletes the completion)
+- Pressing `Cmd/Ctrl + Z` (keeps the completion)
+- Clicking anywhere (prompts to continue)
+
+</Steps>
+
+## Rate Limiting
+
+Here's how to add rate limiting with Upstash Redis:
+
+<Steps>
+
+### Step 1: Install Upstash
+
+```bash
+npm install @upstash/ratelimit @vercel/kv
+```
+
+### Step 2: Add Rate Limiting
+
+```ts
+import { kv } from "@vercel/kv";
+import { Ratelimit } from "@upstash/ratelimit";
+
+export async function POST(req: Request): Promise<Response> {
+  // ... API key check ...
+
+  if (
+    process.env.NODE_ENV != "development" &&
+    process.env.KV_REST_API_URL &&
+    process.env.KV_REST_API_TOKEN
+  ) {
+    const ip = req.headers.get("x-forwarded-for");
+    const ratelimit = new Ratelimit({
+      redis: kv,
+      limiter: Ratelimit.slidingWindow(50, "1 d"),
+    });
+
+    const { success, limit, reset, remaining } = await ratelimit.limit(
+      `novel_ratelimit_${ip}`,
+    );
+
+    if (!success) {
+      return new Response("You have reached your request limit for the day.", {
+        status: 429,
+        headers: {
+          "X-RateLimit-Limit": limit.toString(),
+          "X-RateLimit-Remaining": remaining.toString(),
+          "X-RateLimit-Reset": reset.toString(),
+        },
+      });
+    }
+  }
+
+  // ... rest of the API route ...
+}
+```
+
+### Step 3: Add Environment Variables
+
+```bash
+KV_REST_API_URL=...
+KV_REST_API_TOKEN=...
+```
+
+</Steps>
+
+## Slash Command AI
+
+Novel also includes AI in the slash command menu. The "Continue writing" option uses the same completion API:
+
+```tsx
+{
+  title: "Continue writing",
+  description: "Use AI to expand your thoughts.",
+  searchTerms: ["gpt"],
+  icon: <Magic className="novel-w-7" />,
+}
+```
+
+When selected, it sends the previous 5000 characters to the API:
+
+```tsx
+if (item.title === "Continue writing") {
+  if (isLoading) return;
+  complete(
+    getPrevText(editor, {
+      chars: 5000,
+      offset: 1,
+    })
+  );
+}
+```
+
+## Using Other AI Providers
+
+<Tabs>
+  <Tab title="Anthropic">
+    ```ts
+    import Anthropic from "@anthropic-ai/sdk";
+    import { AnthropicStream, StreamingTextResponse } from "ai";
+
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY || "",
+    });
+
+    export async function POST(req: Request) {
+      const { prompt } = await req.json();
+
+      const response = await anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        stream: true,
+      });
+
+      const stream = AnthropicStream(response);
+      return new StreamingTextResponse(stream);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Google Gemini">
+    ```ts
+    import { GoogleGenerativeAI } from "@google/generative-ai";
+    import { GoogleGenerativeAIStream, StreamingTextResponse } from "ai";
+
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
+
+    export async function POST(req: Request) {
+      const { prompt } = await req.json();
+
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const streamingResponse = await model.generateContentStream(prompt);
+
+      const stream = GoogleGenerativeAIStream(streamingResponse);
+      return new StreamingTextResponse(stream);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Custom Provider">
+    ```ts
+    export async function POST(req: Request) {
+      const { prompt } = await req.json();
+
+      // Call your custom API
+      const response = await fetch("https://your-api.com/complete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.CUSTOM_API_KEY}`,
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      // Return the stream
+      return new StreamingTextResponse(response.body);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Make sure your API route returns a streaming response. Novel expects the completion to be streamed character by character for the best user experience.
+</Warning>
+
+## Customizing the Prompt
+
+You can customize the system prompt to change the AI's behavior:
+
+```ts
+const response = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [
+    {
+      role: "system",
+      content:
+        "You are a creative writing assistant. Continue the user's story in an engaging and imaginative way. " +
+        "Match their tone and style. Keep responses under 200 characters.",
+    },
+    {
+      role: "user",
+      content: prompt,
+    },
+  ],
+  temperature: 0.9, // Higher temperature for more creativity
+  stream: true,
+});
+```
+
+## Monitoring AI Usage
+
+Novel includes analytics tracking for AI features:
+
+```tsx
+import va from "@vercel/analytics";
+
+// Tracks when autocomplete is triggered
+va.track("Autocomplete Shortcut Used");
+
+// Tracks slash command usage
+va.track("Slash Command Used", {
+  command: item.title,
+});
+
+// Tracks rate limit hits
+va.track("Rate Limit Reached");
+```
+
+<Tip>
+Consider implementing usage tracking and rate limiting to manage costs, especially if your application has many users.
+</Tip>

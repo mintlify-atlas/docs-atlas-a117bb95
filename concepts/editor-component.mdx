@@ -1,0 +1,232 @@
+---
+title: 'Editor Component'
+description: 'Understanding the Novel Editor component architecture and how it works'
+---
+
+## Overview
+
+The Novel Editor is a React component built on top of [Tiptap](https://tiptap.dev/), a headless editor framework. It provides a rich text editing experience with AI-powered features, bubble menus for formatting, and automatic content persistence.
+
+## Component Architecture
+
+The Editor component is located in `packages/core/src/ui/editor/index.tsx` and follows a composable architecture:
+
+```tsx
+import Editor from "novel";
+
+function MyEditor() {
+  return (
+    <Editor 
+      completionApi="/api/generate"
+      defaultValue={defaultContent}
+      onUpdate={(editor) => {
+        console.log(editor.getJSON());
+      }}
+    />
+  );
+}
+```
+
+### Core Building Blocks
+
+The Editor is composed of several key parts:
+
+1. **Tiptap Editor Instance** - The underlying editor engine created via `useEditor()` hook
+2. **Extensions System** - Modular functionality through `defaultExtensions` plus custom extensions
+3. **EditorContent** - The editable content area from `@tiptap/react`
+4. **Bubble Menu** - Contextual formatting toolbar that appears on text selection
+5. **Image Resizer** - Special UI for resizing images when selected
+6. **Context Provider** - Shared state via `NovelContext` for child components
+
+### Component Props
+
+The Editor accepts these configuration props:
+
+<ParamField path="completionApi" type="string" default="/api/generate">
+  API endpoint for AI completions. This is where the `++` trigger sends requests.
+</ParamField>
+
+<ParamField path="className" type="string">
+  Custom CSS classes for the editor container. Defaults include responsive sizing and styling.
+</ParamField>
+
+<ParamField path="defaultValue" type="JSONContent | string">
+  Initial content for the editor. Can be Tiptap JSON or HTML string.
+</ParamField>
+
+<ParamField path="extensions" type="Extensions[]" default="[]">
+  Additional Tiptap extensions to merge with `defaultExtensions`.
+</ParamField>
+
+<ParamField path="editorProps" type="EditorProps">
+  Props passed to underlying Tiptap editor (merged with `defaultEditorProps`).
+</ParamField>
+
+<ParamField path="onUpdate" type="function">
+  Callback fired on every editor change. Receives the editor instance.
+</ParamField>
+
+<ParamField path="onDebouncedUpdate" type="function">
+  Callback fired after debounce period (default 750ms). Used for auto-saving.
+</ParamField>
+
+<ParamField path="debounceDuration" type="number" default="750">
+  Milliseconds to wait before firing `onDebouncedUpdate`.
+</ParamField>
+
+<ParamField path="storageKey" type="string" default="novel__content">
+  localStorage key for persisting content. See [Local Storage](/concepts/local-storage).
+</ParamField>
+
+<ParamField path="disableLocalStorage" type="boolean" default="false">
+  Disable automatic localStorage persistence.
+</ParamField>
+
+## How It Works
+
+### Initialization Flow
+
+When the Editor component mounts, this sequence occurs:
+
+1. **Content Retrieval**: The `useLocalStorage` hook attempts to load saved content from localStorage using the `storageKey`
+2. **Editor Creation**: The `useEditor` hook initializes Tiptap with merged extensions and props
+3. **Hydration**: Once the editor is ready, content is set via `editor.commands.setContent()`
+4. **Event Handlers**: AI completion and keyboard handlers are registered
+
+```tsx
+// From index.tsx:85-96
+const [content, setContent] = useLocalStorage(storageKey, defaultValue);
+const [hydrated, setHydrated] = useState(false);
+
+const debouncedUpdates = useDebouncedCallback(async ({ editor }) => {
+  const json = editor.getJSON();
+  onDebouncedUpdate(editor);
+
+  if (!disableLocalStorage) {
+    setContent(json);
+  }
+}, debounceDuration);
+```
+
+<Info>
+The `hydrated` state prevents content from being set multiple times during React's rendering cycles.
+</Info>
+
+### Update Lifecycle
+
+Every time content changes, the editor goes through this flow:
+
+1. User types or modifies content
+2. Tiptap fires `onUpdate` event
+3. Editor checks if user typed `++` (AI trigger)
+4. If not AI trigger:
+   - Calls your `onUpdate` callback immediately
+   - Schedules debounced update (auto-save after 750ms)
+5. On debounced update:
+   - Calls your `onDebouncedUpdate` callback
+   - Saves to localStorage (unless disabled)
+
+```tsx
+// From index.tsx:104-125
+onUpdate: (e) => {
+  const selection = e.editor.state.selection;
+  const lastTwo = getPrevText(e.editor, { chars: 2 });
+  
+  if (lastTwo === "++" && !isLoading) {
+    // AI completion triggered - see AI Completions docs
+    e.editor.commands.deleteRange({
+      from: selection.from - 2,
+      to: selection.from,
+    });
+    complete(getPrevText(e.editor, { chars: 5000 }));
+  } else {
+    onUpdate(e.editor);
+    debouncedUpdates(e);
+  }
+}
+```
+
+### Editor Props Merging
+
+The component merges your custom `editorProps` with Novel's `defaultEditorProps`:
+
+```tsx
+// From index.tsx:98-103
+const editor = useEditor({
+  extensions: [...defaultExtensions, ...extensions],
+  editorProps: {
+    ...defaultEditorProps,
+    ...editorProps,
+  },
+  // ...
+});
+```
+
+The `defaultEditorProps` (from `props.ts:4-53`) provide:
+- Prose styling via CSS classes
+- Paste handler for images
+- Drop handler for drag-and-drop images
+- Keyboard event handling for slash command menu
+
+<Tip>
+You can override any `defaultEditorProps` by passing your own in the `editorProps` prop. Your props will take precedence.
+</Tip>
+
+## Component Structure
+
+```tsx
+// From index.tsx:204-221
+return (
+  <NovelContext.Provider value={{ completionApi }}>
+    <div onClick={() => editor?.chain().focus().run()} className={className}>
+      {editor && <EditorBubbleMenu editor={editor} />}
+      {editor?.isActive("image") && <ImageResizer editor={editor} />}
+      <EditorContent editor={editor} />
+    </div>
+  </NovelContext.Provider>
+);
+```
+
+**Why this structure?**
+
+- **Context Provider**: Shares `completionApi` with nested components like SlashCommand
+- **Click-to-focus**: Clicking anywhere in the container focuses the editor
+- **Conditional Menus**: BubbleMenu always renders (has internal visibility logic), ImageResizer only when image is selected
+- **EditorContent**: The actual editable area rendered by Tiptap
+
+## Accessing the Editor Instance
+
+You can access the Tiptap editor instance through callbacks:
+
+```tsx
+import { Editor as TiptapEditor } from "@tiptap/core";
+import { useRef } from "react";
+
+function MyEditor() {
+  const editorRef = useRef<TiptapEditor | null>(null);
+
+  return (
+    <Editor
+      onUpdate={(editor) => {
+        editorRef.current = editor;
+        // Now you can call editor.getJSON(), editor.commands.*, etc.
+      }}
+    />
+  );
+}
+```
+
+<Warning>
+The editor instance is `undefined` until the component mounts. Always check if it exists before calling methods.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Extensions" icon="puzzle-piece" href="/concepts/extensions">
+    Learn about the extension system and default extensions
+  </Card>
+  <Card title="AI Completions" icon="sparkles" href="/concepts/ai-completions">
+    Understand how the ++ trigger and AI integration works
+  </Card>
+</CardGroup>

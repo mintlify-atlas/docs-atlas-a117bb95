@@ -1,80 +1,202 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with Novel in under 5 minutes
 ---
 
-## Get started in three steps
+This guide will help you integrate the Novel editor into your React application and start editing.
 
-Get your documentation site running locally and make your first customization.
+## Basic usage
 
-### Step 1: Set up your local environment
+The simplest way to use Novel is to import the `Editor` component and render it in your app:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+```jsx App.jsx
+import { Editor } from "novel";
 
-### Step 2: Deploy your changes
+export default function App() {
+  return <Editor />;
+}
+```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+That's it! The editor will render with default styling and functionality.
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Using the editor
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Once the editor is rendered, you can:
 
-### Step 3: Go live
+<Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Step title="Type content">
+  Click into the editor and start typing. The placeholder text will guide you:
+  
+  - Press `/` for commands
+  - Type `++` for AI autocomplete (if configured)
+</Step>
+
+<Step title="Use slash commands">
+  Type `/` to open the command menu and access:
+  
+  - Headings (H1, H2, H3)
+  - Lists (bullet, numbered, task)
+  - Code blocks
+  - Images
+  - Horizontal rules
+  - And more
+</Step>
+
+<Step title="Format with the bubble menu">
+  Select any text to reveal the bubble menu with formatting options:
+  
+  - Bold, italic, underline
+  - Text color and highlights
+  - Code formatting
+  - Links
+</Step>
+
+<Step title="Trigger AI completions">
+  Type `++` anywhere to trigger AI-powered autocompletions based on your context (requires API endpoint setup).
+</Step>
+
+</Steps>
+
+## Customizing the editor
+
+Novel provides several props to customize behavior and appearance:
+
+```jsx App.jsx
+import { Editor } from "novel";
+
+export default function App() {
+  return (
+    <Editor
+      className="min-h-[300px] w-full max-w-4xl"
+      defaultValue={{
+        type: "doc",
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 1 },
+            content: [{ type: "text", text: "Welcome to Novel" }],
+          },
+        ],
+      }}
+      onUpdate={(editor) => {
+        console.log("Content updated:", editor?.getJSON());
+      }}
+      storageKey="my-novel-content"
+    />
+  );
+}
+```
+
+### Common props
+
+- `className` - Custom CSS classes for the editor container
+- `defaultValue` - Initial content as JSONContent or string
+- `onUpdate` - Callback fired on every content change
+- `onDebouncedUpdate` - Debounced update callback (default: 750ms)
+- `storageKey` - Local storage key for persisting content
+- `disableLocalStorage` - Disable automatic local storage persistence
+
+<Tip>
+  The editor automatically saves content to local storage by default. Use a unique `storageKey` for each editor instance to prevent conflicts.
+</Tip>
+
+## Accessing editor content
+
+You can access the editor's content through the `onUpdate` and `onDebouncedUpdate` callbacks:
+
+```jsx App.jsx
+import { Editor } from "novel";
+import { useState } from "react";
+
+export default function App() {
+  const [content, setContent] = useState(null);
+
+  return (
+    <>
+      <Editor
+        onDebouncedUpdate={(editor) => {
+          setContent(editor?.getJSON());
+        }}
+        debounceDuration={1000}
+      />
+      
+      <pre>
+        {JSON.stringify(content, null, 2)}
+      </pre>
+    </>
+  );
+}
+```
+
+<Note>
+  Use `onDebouncedUpdate` instead of `onUpdate` when saving to a database or API to avoid excessive calls. The default debounce duration is 750ms.
+</Note>
+
+## Adding custom extensions
+
+Novel is built on Tiptap, so you can extend it with custom Tiptap extensions:
+
+```jsx App.jsx
+import { Editor } from "novel";
+import { Color } from "@tiptap/extension-color";
+import { TextStyle } from "@tiptap/extension-text-style";
+
+export default function App() {
+  return (
+    <Editor
+      extensions={[
+        // Add custom extensions here
+        // They will be merged with Novel's default extensions
+      ]}
+    />
+  );
+}
+```
+
+<Warning>
+  Novel already includes many common Tiptap extensions like StarterKit, Link, Image, TaskList, and more. Check the default extensions in the [source code](https://github.com/steven-tey/novel/blob/main/packages/core/src/ui/editor/extensions/index.tsx) before adding your own to avoid conflicts.
+</Warning>
+
+## Customizing editor props
+
+You can pass additional props to the underlying Tiptap editor using the `editorProps` option:
+
+```jsx App.jsx
+import { Editor } from "novel";
+
+export default function App() {
+  return (
+    <Editor
+      editorProps={{
+        attributes: {
+          class: "prose prose-lg focus:outline-none max-w-full",
+        },
+      }}
+    />
+  );
+}
+```
+
+These props are merged with Novel's default editor props, which handle image uploads, paste events, and keyboard shortcuts.
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you have the basics down, explore more advanced features:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card
+    title="API reference"
+    icon="code"
+    href="/api/editor"
+  >
+    View all available props and configuration options
+  </Card>
+  <Card
+    title="Example app"
+    icon="arrow-up-right-from-square"
+    href="https://github.com/steven-tey/novella"
+  >
+    See a complete example application using Novel
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,336 @@
+---
+title: Custom AI API
+description: Configure Novel to use your own AI completion endpoint
+---
+
+## Overview
+
+Novel's AI autocomplete feature uses the `completionApi` prop to specify which API endpoint to call when users trigger AI completion (by typing `++` or selecting from the slash menu). By default, it calls `/api/generate`, but you can customize this to use your own AI service.
+
+## Basic Custom API
+
+```tsx
+import { Editor } from "novel";
+
+export default function CustomAIEditor() {
+  return (
+    <Editor
+      completionApi="/api/my-custom-ai"
+    />
+  );
+}
+```
+
+## Expected API Format
+
+Novel uses the [Vercel AI SDK](https://sdk.vercel.ai/docs) under the hood, specifically the `useCompletion` hook. Your API endpoint should:
+
+1. Accept a POST request with the prompt in the request body
+2. Return a streaming text response
+3. Follow the Vercel AI SDK completion API format
+
+### Example API Route (Next.js App Router)
+
+```ts
+// app/api/my-custom-ai/route.ts
+import { OpenAIStream, StreamingTextResponse } from "ai";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      {
+        role: "system",
+        content: "You are an AI writing assistant. Continue the user's text naturally and concisely.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.7,
+    max_tokens: 200,
+    stream: true,
+  });
+
+  const stream = OpenAIStream(response);
+  return new StreamingTextResponse(stream);
+}
+```
+
+### Example API Route (Next.js Pages Router)
+
+```ts
+// pages/api/my-custom-ai.ts
+import { Configuration, OpenAIApi } from "openai-edge";
+import { OpenAIStream, StreamingTextResponse } from "ai";
+
+const config = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const openai = new OpenAIApi(config);
+
+export default async function handler(req: Request) {
+  const { prompt } = await req.json();
+
+  const response = await openai.createChatCompletion({
+    model: "gpt-4",
+    messages: [
+      {
+        role: "system",
+        content: "You are an AI writing assistant.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.7,
+    max_tokens: 200,
+    stream: true,
+  });
+
+  const stream = OpenAIStream(response);
+  return new StreamingTextResponse(stream);
+}
+
+export const config = {
+  runtime: "edge",
+};
+```
+
+## Using Different AI Providers
+
+### Anthropic Claude
+
+```ts
+// app/api/claude-completion/route.ts
+import Anthropic from "@anthropic-ai/sdk";
+import { AnthropicStream, StreamingTextResponse } from "ai";
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  const response = await anthropic.messages.create({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 200,
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    stream: true,
+  });
+
+  const stream = AnthropicStream(response);
+  return new StreamingTextResponse(stream);
+}
+```
+
+Then use it in your editor:
+
+```tsx
+import { Editor } from "novel";
+
+export default function ClaudeEditor() {
+  return <Editor completionApi="/api/claude-completion" />;
+}
+```
+
+### Custom AI Service
+
+If you're using a custom AI service or self-hosted model:
+
+```ts
+// app/api/custom-completion/route.ts
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  // Call your custom AI service
+  const response = await fetch("https://your-ai-service.com/complete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.CUSTOM_AI_KEY}`,
+    },
+    body: JSON.stringify({ text: prompt }),
+  });
+
+  // Return the streaming response
+  return new Response(response.body, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+    },
+  });
+}
+```
+
+## How AI Completion Works
+
+When a user triggers AI completion in Novel:
+
+1. User types `++` or selects "Continue writing" from slash menu
+2. Novel extracts the previous 5000 characters of text as context
+3. Novel sends a POST request to your `completionApi` endpoint with the context as the prompt
+4. Your API streams back the completion text
+5. Novel inserts the completion into the editor in real-time
+
+From the Novel source code (packages/core/src/ui/editor/index.tsx:109-118):
+
+```tsx
+if (lastTwo === "++" && !isLoading) {
+  e.editor.commands.deleteRange({
+    from: selection.from - 2,
+    to: selection.from,
+  });
+  complete(
+    getPrevText(e.editor, {
+      chars: 5000,
+    })
+  );
+}
+```
+
+## Customizing AI Behavior
+
+While you can't directly modify Novel's AI trigger mechanism without forking, you can customize the AI's behavior through your API:
+
+```ts
+// app/api/custom-ai/route.ts
+import { OpenAIStream, StreamingTextResponse } from "ai";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  // Customize the system prompt to change AI behavior
+  const systemPrompt = `You are a creative writing assistant. 
+    Write in a friendly, engaging tone. 
+    Keep responses concise (1-3 sentences). 
+    Match the style and tone of the existing text.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.8, // Higher = more creative
+    max_tokens: 150,  // Limit completion length
+    stream: true,
+  });
+
+  const stream = OpenAIStream(response);
+  return new StreamingTextResponse(stream);
+}
+```
+
+## Error Handling
+
+Novel displays errors using `toast.error()` from the `sonner` library. Make sure your app has a toast provider:
+
+```tsx
+// app/layout.tsx
+import { Toaster } from "sonner";
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        {children}
+        <Toaster position="bottom-right" />
+      </body>
+    </html>
+  );
+}
+```
+
+Your API should return appropriate error responses:
+
+```ts
+// app/api/my-ai/route.ts
+export async function POST(req: Request) {
+  try {
+    const { prompt } = await req.json();
+
+    if (!process.env.OPENAI_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "API key not configured" }),
+        { status: 500 }
+      );
+    }
+
+    // ... your AI logic
+
+  } catch (error) {
+    console.error("AI completion error:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to generate completion" }),
+      { status: 500 }
+    );
+  }
+}
+```
+
+## Rate Limiting
+
+Novel tracks when rate limits are hit (from packages/core/src/ui/editor/index.tsx:140-142):
+
+```tsx
+if (err.message === "You have reached your request limit for the day.") {
+  va.track("Rate Limit Reached");
+}
+```
+
+Implement rate limiting in your API:
+
+```ts
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(10, "1 h"),
+});
+
+export async function POST(req: Request) {
+  const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
+  const { success } = await ratelimit.limit(ip);
+
+  if (!success) {
+    return new Response(
+      JSON.stringify({ 
+        error: "You have reached your request limit for the day." 
+      }),
+      { status: 429 }
+    );
+  }
+
+  // ... your AI logic
+}
+```
+
+<Tip>
+  The AI completion feature can be triggered by typing `++` anywhere in the editor, or by selecting "Continue writing" from the slash menu (type `/`). Users can press Escape to cancel an in-progress completion.
+</Tip>
+
+## Disabling AI Completion
+
+If you want to disable AI completion entirely, you'll need to use the headless editor components and customize the extensions. See the [Customization](/guides/customization) guide for more details.

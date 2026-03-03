@@ -1,0 +1,222 @@
+---
+title: "CustomKeymap Extension"
+description: "API reference for the CustomKeymap extension"
+---
+
+## Overview
+
+The `CustomKeymap` extension enhances the default keyboard behavior in the editor. It provides improved text selection with Cmd/Ctrl+A, allowing users to first select text within a node before selecting the entire document.
+
+## Source Location
+
+Defined in `~/workspace/source/packages/core/src/ui/editor/extensions/custom-keymap.ts:15-56`
+
+## Features
+
+- Enhanced Cmd/Ctrl+A behavior
+- First press: Select text within current node
+- Second press: Select entire document
+- Maintains standard selection behavior
+
+## Configuration
+
+The CustomKeymap extension is pre-configured and included in the default Novel extensions.
+
+```typescript
+const CustomKeymap = Extension.create({
+  name: "CustomKeymap",
+  addCommands() { /* ... */ },
+  addKeyboardShortcuts() { /* ... */ },
+});
+```
+
+## Usage Examples
+
+### Default Behavior
+
+The CustomKeymap extension is included by default:
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  // CustomKeymap is already included
+  return <Editor />;
+}
+```
+
+### Keyboard Shortcuts
+
+**Cmd/Ctrl + A** (Select All):
+1. First press: Selects all text within the current node (paragraph, heading, etc.)
+2. Second press: Selects the entire document
+
+This two-step selection matches the behavior in many modern editors like Notion and Google Docs.
+
+## API Reference
+
+### Commands
+
+#### selectTextWithinNodeBoundaries
+
+Selects all text within the current node boundaries.
+
+```typescript
+commands.selectTextWithinNodeBoundaries(): boolean
+```
+
+**Returns:** `true` if the command was executed successfully.
+
+**Example:**
+```typescript
+editor.chain().selectTextWithinNodeBoundaries().run();
+```
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/custom-keymap.ts:20-31`
+
+### Keyboard Shortcuts
+
+<ParamField path="Mod-a" type="Keyboard Shortcut">
+  Enhanced "Select All" behavior.
+  
+  - **First press**: Selects text within current node
+  - **Second press**: Falls through to default (select entire document)
+  - **Mod** = Cmd on Mac, Ctrl on Windows/Linux
+</ParamField>
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/custom-keymap.ts:35-53`
+
+## Implementation Details
+
+### Selection Logic
+
+The extension determines selection behavior by comparing:
+- Current selection start/end positions
+- Current node start/end positions
+
+If the selection doesn't extend to node boundaries, it expands to fill the node. Otherwise, it returns `false` to allow default behavior (select all).
+
+```typescript
+const startSelectionPos = tr.selection.from;
+const endSelectionPos = tr.selection.to;
+const startNodePos = tr.selection.$from.start();
+const endNodePos = tr.selection.$to.end();
+
+const isCurrentTextSelectionNotExtendedToNodeBoundaries =
+  startSelectionPos > startNodePos || endSelectionPos < endNodePos;
+
+if (isCurrentTextSelectionNotExtendedToNodeBoundaries) {
+  editor.chain().selectTextWithinNodeBoundaries().run();
+  return true;
+}
+return false;
+```
+
+## Type Definitions
+
+```typescript
+import { Extension } from "@tiptap/core";
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    customkeymap: {
+      /**
+       * Select text between node boundaries
+       */
+      selectTextWithinNodeBoundaries: () => ReturnType;
+    };
+  }
+}
+
+const CustomKeymap: Extension;
+```
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/custom-keymap.ts:3-13`
+
+## Usage in Custom Extensions
+
+You can use the `selectTextWithinNodeBoundaries` command in your own extensions:
+
+```typescript
+import { Extension } from "@tiptap/core";
+
+const MyExtension = Extension.create({
+  name: "myExtension",
+  
+  addKeyboardShortcuts() {
+    return {
+      "Mod-Shift-a": ({ editor }) => {
+        // First select within node
+        editor.chain().selectTextWithinNodeBoundaries().run();
+        // Then do something else
+        return true;
+      },
+    };
+  },
+});
+```
+
+## Behavior Examples
+
+### Example 1: Selection within a paragraph
+
+```
+Before: The quick |brown fox| jumps over the lazy dog.
+         (| represents cursor/selection)
+
+After Cmd+A: The quick [brown fox jumps over the lazy dog].
+             ([ ] represents selection)
+```
+
+### Example 2: Full paragraph already selected
+
+```
+Before: [The quick brown fox jumps over the lazy dog.]
+
+After Cmd+A: [Entire document content selected]
+```
+
+### Example 3: Selection in a heading
+
+```
+Before: # Hello |World|
+
+After Cmd+A: # [Hello World]
+
+After Cmd+A again: [Entire document selected]
+```
+
+## Browser Compatibility
+
+The extension uses standard Tiptap APIs and works in all browsers that support Tiptap:
+- Chrome/Edge
+- Firefox
+- Safari
+- Mobile browsers
+
+## Accessibility
+
+The CustomKeymap extension enhances accessibility by:
+- Providing predictable selection behavior
+- Matching patterns from popular editors
+- Supporting standard keyboard shortcuts
+- Working with screen readers
+
+## Related Commands
+
+The extension works alongside other Tiptap selection commands:
+
+- `setTextSelection`: Set selection to specific range
+- `selectAll`: Select entire document
+- `selectParentNode`: Select parent node
+
+Example combining commands:
+
+```typescript
+editor
+  .chain()
+  .selectTextWithinNodeBoundaries()
+  .deleteSelection()
+  .insertContent("New content")
+  .run();
+```

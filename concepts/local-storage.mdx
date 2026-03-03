@@ -1,0 +1,493 @@
+---
+title: 'Local Storage'
+description: 'How Novel automatically persists editor content to browser localStorage'
+---
+
+## Overview
+
+Novel includes built-in localStorage persistence that automatically saves editor content to the browser. This prevents users from losing their work if they accidentally close the tab, refresh the page, or navigate away.
+
+<Info>
+Content is saved as Tiptap JSON format, preserving all formatting, links, and structure—not just plain text.
+</Info>
+
+## How It Works
+
+### Automatic Persistence
+
+By default, Novel saves content automatically:
+
+```tsx
+import { Editor } from "novel";
+
+function MyEditor() {
+  return <Editor />; // Content auto-saves to localStorage
+}
+```
+
+No configuration needed. Content is saved every time the editor updates (with debouncing to avoid excessive writes).
+
+### The useLocalStorage Hook
+
+Novel uses a custom React hook for localStorage management:
+
+```tsx
+// From lib/hooks/use-local-storage.ts:3-27
+const useLocalStorage = <T>(
+  key: string,
+  initialValue: T
+): [T, (value: T) => void] => {
+  const [storedValue, setStoredValue] = useState(initialValue);
+
+  useEffect(() => {
+    // Retrieve from localStorage
+    const item = window.localStorage.getItem(key);
+    if (item) {
+      setStoredValue(JSON.parse(item));
+    }
+  }, [key]);
+
+  const setValue = (value: T) => {
+    // Save state
+    setStoredValue(value);
+    // Save to localStorage
+    window.localStorage.setItem(key, JSON.stringify(value));
+  };
+  
+  return [storedValue, setValue];
+};
+```
+
+**How it works:**
+
+1. **Initialization**: On mount, attempts to load saved content from `localStorage.getItem(key)`
+2. **Parsing**: Parses JSON string back into Tiptap's JSONContent format
+3. **Setter**: The `setValue` function updates both React state and localStorage
+4. **Sync**: Changes are immediately written to localStorage
+
+### Integration with Editor
+
+The Editor component uses this hook:
+
+```tsx
+// From index.tsx:85
+const [content, setContent] = useLocalStorage(storageKey, defaultValue);
+```
+
+Where:
+- `storageKey` defaults to `"novel__content"` (customizable via props)
+- `defaultValue` is the initial editor content (defaults to demo content)
+
+## Content Hydration
+
+Novel hydrates the editor content after the editor instance is created:
+
+```tsx
+// From index.tsx:191-202
+useEffect(() => {
+  if (!editor || hydrated) return;
+
+  const value = disableLocalStorage ? defaultValue : content;
+
+  if (value) {
+    editor.commands.setContent(value);
+    setHydrated(true);
+  }
+}, [editor, defaultValue, content, hydrated, disableLocalStorage]);
+```
+
+**Why separate hydration?**
+
+1. **Editor must exist first**: Can't call `editor.commands.setContent()` before editor is initialized
+2. **Avoid duplicate sets**: The `hydrated` flag ensures content is only set once
+3. **Respects disableLocalStorage**: Uses `defaultValue` if localStorage is disabled
+
+<Note>
+Hydration happens after the initial render. There's a brief moment where the editor is empty before content loads.
+</Note>
+
+## Debounced Saving
+
+Novel doesn't save on every keystroke. Instead, it uses debouncing:
+
+```tsx
+// From index.tsx:89-96
+const debouncedUpdates = useDebouncedCallback(async ({ editor }) => {
+  const json = editor.getJSON();
+  onDebouncedUpdate(editor);
+
+  if (!disableLocalStorage) {
+    setContent(json);
+  }
+}, debounceDuration);
+```
+
+**Debounce flow:**
+
+1. User types in the editor
+2. Editor's `onUpdate` fires immediately
+3. `debouncedUpdates` is scheduled (default: 750ms delay)
+4. If user keeps typing, the timer resets
+5. After 750ms of inactivity, content is saved to localStorage
+
+**Why debounce?**
+
+- **Performance**: Prevents excessive localStorage writes (which can be slow)
+- **Battery life**: Reduces CPU usage on mobile devices
+- **Efficiency**: Only saves when user pauses typing
+
+<Tip>
+You can customize the debounce duration via the `debounceDuration` prop (in milliseconds).
+</Tip>
+
+## Storage Key Configuration
+
+Customize where content is saved:
+
+```tsx
+<Editor storageKey="my-app__editor-content" />
+```
+
+This allows you to:
+- Have multiple editors on the same domain with separate storage
+- Use namespaced keys for organizational purposes
+- Avoid collisions with other libraries
+
+**Default key structure:**
+```
+novel__content
+```
+
+**Example custom keys:**
+```
+my-blog__post-draft
+my-app__settings__bio
+user-123__note-456
+```
+
+### Multiple Editors
+
+For apps with multiple editor instances:
+
+```tsx
+function App() {
+  return (
+    <>
+      <Editor storageKey="editor-1" />
+      <Editor storageKey="editor-2" />
+      <Editor storageKey="editor-3" />
+    </>
+  );
+}
+```
+
+Each editor maintains separate localStorage state.
+
+## Disabling Local Storage
+
+You can disable automatic persistence:
+
+```tsx
+<Editor disableLocalStorage={true} />
+```
+
+When disabled:
+- Content is NOT loaded from localStorage on mount
+- Content is NOT saved to localStorage on update
+- `defaultValue` is used as initial content
+- Your `onUpdate` and `onDebouncedUpdate` callbacks still fire
+
+**Use cases for disabling:**
+
+<CardGroup cols={2}>
+  <Card title="Server Persistence">
+    You're saving to a database instead
+  </Card>
+  <Card title="Privacy Concerns">
+    Sensitive content shouldn't be stored in browser
+  </Card>
+  <Card title="Shared Devices">
+    Multiple users on same computer
+  </Card>
+  <Card title="Testing">
+    Prevent test data from persisting
+  </Card>
+</CardGroup>
+
+## Data Format
+
+Content is stored as JSON:
+
+```json
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": { "level": 1 },
+      "content": [
+        {
+          "type": "text",
+          "text": "My Document Title"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "This is a paragraph with "
+        },
+        {
+          "type": "text",
+          "marks": [{"type": "bold"}],
+          "text": "bold text"
+        }
+      ]
+    }
+  ]
+}
+```
+
+This is Tiptap's native `JSONContent` format, which:
+- Preserves all formatting and structure
+- Is deterministic and easy to parse
+- Can be converted to HTML or Markdown
+- Supports all Tiptap nodes and marks
+
+## Manual Content Access
+
+Access localStorage content outside the Editor:
+
+```tsx
+// Read
+const savedContent = localStorage.getItem("novel__content");
+if (savedContent) {
+  const json = JSON.parse(savedContent);
+  console.log(json);
+}
+
+// Write
+const content = {
+  type: "doc",
+  content: [/* ... */]
+};
+localStorage.setItem("novel__content", JSON.stringify(content));
+
+// Clear
+localStorage.removeItem("novel__content");
+```
+
+<Warning>
+Manually modifying localStorage while the editor is mounted can cause state desync. Always update through the Editor component or reload the page after manual changes.
+</Warning>
+
+## Combining with Server Persistence
+
+Use localStorage for instant saves, server for permanent storage:
+
+```tsx
+function MyEditor() {
+  const [saving, setSaving] = useState(false);
+
+  const saveToServer = async (content: JSONContent) => {
+    setSaving(true);
+    try {
+      await fetch("/api/save", {
+        method: "POST",
+        body: JSON.stringify(content),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Editor
+      // localStorage still active for instant recovery
+      disableLocalStorage={false}
+      // Also save to server
+      onDebouncedUpdate={(editor) => {
+        saveToServer(editor.getJSON());
+      }}
+    />
+  );
+}
+```
+
+**This pattern provides:**
+- **Instant recovery**: If server save fails, localStorage backup exists
+- **Cross-device sync**: Server persistence enables access from multiple devices
+- **Offline editing**: localStorage works even without internet
+
+<Tip>
+Implement conflict resolution if the same document is edited on multiple devices. Check server timestamps against localStorage timestamps.
+</Tip>
+
+## Storage Limits
+
+Browser localStorage has limits:
+
+- **Chrome/Edge**: ~10MB per origin
+- **Firefox**: ~10MB per origin
+- **Safari**: ~5MB per origin
+
+For large documents:
+
+```tsx
+function estimateSize(json: JSONContent) {
+  const str = JSON.stringify(json);
+  return new Blob([str]).size; // bytes
+}
+
+function MyEditor() {
+  return (
+    <Editor
+      onDebouncedUpdate={(editor) => {
+        const json = editor.getJSON();
+        const size = estimateSize(json);
+        
+        if (size > 5_000_000) { // 5MB
+          console.warn("Document too large for localStorage");
+          // Save to server instead
+        }
+      }}
+    />
+  );
+}
+```
+
+<Warning>
+If localStorage is full, `setItem()` throws a `QuotaExceededError`. Novel doesn't handle this automatically—implement your own error handling if needed.
+</Warning>
+
+## Clearing Saved Content
+
+Users can clear their saved content:
+
+```tsx
+function ClearButton() {
+  const handleClear = () => {
+    localStorage.removeItem("novel__content");
+    window.location.reload(); // Reload to reset editor
+  };
+
+  return (
+    <button onClick={handleClear}>
+      Clear Saved Content
+    </button>
+  );
+}
+```
+
+Or programmatically:
+
+```tsx
+function MyEditor() {
+  const editorRef = useRef<Editor | null>(null);
+
+  const resetContent = () => {
+    // Clear localStorage
+    localStorage.removeItem("novel__content");
+    
+    // Reset editor content
+    editorRef.current?.commands.setContent("");
+  };
+
+  return (
+    <>
+      <button onClick={resetContent}>Reset</button>
+      <Editor
+        onUpdate={(editor) => {
+          editorRef.current = editor;
+        }}
+      />
+    </>
+  );
+}
+```
+
+## Browser Compatibility
+
+localStorage is supported in all modern browsers:
+
+- Chrome/Edge: ✅
+- Firefox: ✅
+- Safari: ✅
+- Opera: ✅
+- IE 11: ✅ (though Novel may not support IE11)
+
+**Private/Incognito mode**: localStorage works but is cleared when the session ends.
+
+<Note>
+Some browsers allow users to disable localStorage. Novel doesn't detect this—consider adding a try/catch around localStorage operations for production apps.
+</Note>
+
+## Security Considerations
+
+### What's Safe to Store
+
+localStorage is:
+- ✅ Per-origin (other websites can't access it)
+- ✅ Persistent across sessions
+- ✅ Synchronous and fast
+
+### What's NOT Safe
+
+localStorage is:
+- ❌ NOT encrypted
+- ❌ Accessible via JavaScript (XSS attacks)
+- ❌ NOT sent to server automatically
+
+<Warning>
+Never store sensitive data in localStorage:
+- Passwords or API keys
+- Personal identification numbers
+- Financial information
+- Authentication tokens (use httpOnly cookies instead)
+</Warning>
+
+### Content Security
+
+For public/shared computers:
+
+```tsx
+// Detect if user wants privacy
+const isIncognito = /* detection logic */;
+
+<Editor disableLocalStorage={isIncognito} />
+```
+
+Or provide a user preference:
+
+```tsx
+function MyEditor() {
+  const [saveLocally, setSaveLocally] = useState(true);
+
+  return (
+    <>
+      <label>
+        <input
+          type="checkbox"
+          checked={saveLocally}
+          onChange={(e) => setSaveLocally(e.target.checked)}
+        />
+        Save drafts locally
+      </label>
+      <Editor disableLocalStorage={!saveLocally} />
+    </>
+  );
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Editor Component" icon="code" href="/concepts/editor-component">
+    Learn about other editor features and props
+  </Card>
+  <Card title="Extensions" icon="puzzle-piece" href="/concepts/extensions">
+    Explore the extension system
+  </Card>
+</CardGroup>

@@ -1,0 +1,114 @@
+---
+title: Installation
+description: Install Novel in your React project
+---
+
+Novel is distributed as an npm package that you can install in any React project. Choose your preferred package manager below.
+
+## Prerequisites
+
+Before installing Novel, ensure you have:
+
+- Node.js 16.x or later
+- React 18.2.0 or later
+- A React project (Next.js, Create React App, Vite, etc.)
+
+## Install the package
+
+<CodeGroup>
+
+```bash npm
+npm install novel
+```
+
+```bash yarn
+yarn add novel
+```
+
+```bash pnpm
+pnpm add novel
+```
+
+</CodeGroup>
+
+## Peer dependencies
+
+Novel requires React 18.2.0 or later as a peer dependency. If you don't have React installed, add it to your project:
+
+<CodeGroup>
+
+```bash npm
+npm install react react-dom
+```
+
+```bash yarn
+yarn add react react-dom
+```
+
+```bash pnpm
+pnpm add react react-dom
+```
+
+</CodeGroup>
+
+## Set up AI completions (optional)
+
+To enable AI-powered autocompletions, you'll need to create an API endpoint that handles completion requests. Novel uses the Vercel AI SDK to stream responses from OpenAI.
+
+<Steps>
+
+<Step title="Get an OpenAI API key">
+  Sign up for an [OpenAI account](https://platform.openai.com/signup) and create an API key from the [API keys page](https://platform.openai.com/account/api-keys).
+</Step>
+
+<Step title="Create a completion endpoint">
+  Create an API route in your project that matches the `completionApi` prop (default is `/api/generate`). Here's an example for Next.js:
+
+  ```typescript app/api/generate/route.ts
+  import { OpenAIStream, StreamingTextResponse } from 'ai';
+  import OpenAI from 'openai';
+
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  export async function POST(req: Request) {
+    const { prompt } = await req.json();
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+    });
+
+    const stream = OpenAIStream(response);
+    return new StreamingTextResponse(stream);
+  }
+  ```
+</Step>
+
+<Step title="Add your API key to environment variables">
+  Create a `.env.local` file in your project root:
+
+  ```bash .env.local
+  OPENAI_API_KEY=your_api_key_here
+  ```
+</Step>
+
+</Steps>
+
+<Note>
+  The AI completion feature is optional. Novel works perfectly fine without it, but you won't be able to use the `++` autocomplete shortcut.
+</Note>
+
+## Next steps
+
+Now that you've installed Novel, you're ready to start using it in your application.
+
+<Card
+  title="Quickstart guide"
+  icon="rocket"
+  href="/quickstart"
+>
+  Learn how to add the editor to your React app and start editing
+</Card>

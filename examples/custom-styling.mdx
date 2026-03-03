@@ -1,0 +1,144 @@
+---
+title: Custom Styling
+description: Customize the appearance of the Novel editor with custom classes and props
+---
+
+## Overview
+
+The Novel editor accepts a `className` prop to customize the container styling, and `editorProps` to customize the editor's behavior and appearance. This example shows how to create a custom-styled editor.
+
+## Custom Container Styling
+
+```tsx
+import { Editor } from "novel";
+
+export default function CustomStyledEditor() {
+  return (
+    <Editor
+      className="min-h-[300px] w-full border-2 border-blue-500 rounded-xl p-4 shadow-xl bg-gray-50"
+    />
+  );
+}
+```
+
+This removes the default styling and applies your custom classes to the editor container.
+
+## Custom Editor Props
+
+You can customize the editor's internal behavior using the `editorProps` prop, which accepts any [Tiptap EditorProps](https://tiptap.dev/api/editor#editor-props):
+
+```tsx
+import { Editor } from "novel";
+import { EditorProps } from "@tiptap/pm/view";
+
+export default function CustomEditorProps() {
+  const editorProps: EditorProps = {
+    attributes: {
+      class: "prose prose-lg prose-blue max-w-none focus:outline-none",
+    },
+  };
+
+  return (
+    <Editor
+      className="min-h-[400px] w-full border border-gray-300 rounded-lg"
+      editorProps={editorProps}
+    />
+  );
+}
+```
+
+## Fully Customized Example
+
+Here's a complete example with custom styling, custom placeholder, and a different initial state:
+
+```tsx
+import { Editor } from "novel";
+import { EditorProps } from "@tiptap/pm/view";
+
+export default function FullyCustomEditor() {
+  const customEditorProps: EditorProps = {
+    attributes: {
+      class: "prose-sm prose-stone dark:prose-invert focus:outline-none max-w-full px-8 py-4",
+    },
+  };
+
+  const initialContent = {
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1 },
+        content: [{ type: "text", text: "Welcome to My Custom Editor" }],
+      },
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "Start writing your content here...",
+          },
+        ],
+      },
+    ],
+  };
+
+  return (
+    <div className="w-full max-w-4xl mx-auto my-8">
+      <Editor
+        className="min-h-[500px] border-2 border-purple-200 rounded-2xl bg-white shadow-2xl"
+        editorProps={customEditorProps}
+        defaultValue={initialContent}
+        storageKey="my-custom-editor"
+      />
+    </div>
+  );
+}
+```
+
+## Understanding Default Styles
+
+The default `className` includes:
+
+- `novel-relative` - Relative positioning for absolute children
+- `novel-min-h-[500px]` - Minimum height of 500px
+- `novel-w-full novel-max-w-screen-lg` - Full width with max-width constraint
+- `novel-border-stone-200 novel-bg-white` - Border and background colors
+- `sm:novel-rounded-lg sm:novel-border sm:novel-shadow-lg` - Responsive rounded corners and shadow
+
+The default `editorProps.attributes.class` includes:
+
+- `novel-prose-lg novel-prose-stone` - Typography styling
+- `dark:novel-prose-invert` - Dark mode support
+- `prose-headings:novel-font-title` - Custom font for headings
+- `novel-font-default` - Default font family
+- `focus:novel-outline-none` - Remove focus outline
+- `novel-max-w-full` - Full width content
+
+<Tip>
+  All Novel default classes are prefixed with `novel-` to avoid conflicts with your global styles. You can override any of these by providing your own `className` or `editorProps`.
+</Tip>
+
+## Custom Editor with Tailwind
+
+If you're using Tailwind CSS, you can leverage the `@tailwindcss/typography` plugin:
+
+```tsx
+import { Editor } from "novel";
+
+export default function TailwindEditor() {
+  return (
+    <Editor
+      className="min-h-[400px] w-full max-w-3xl mx-auto"
+      editorProps={{
+        attributes: {
+          class: "prose prose-indigo lg:prose-xl focus:outline-none max-w-none p-8",
+        },
+      }}
+    />
+  );
+}
+```
+
+<Tip>
+  You can combine Novel's default extensions with custom styling to create a unique editor experience that matches your application's design system.
+</Tip>

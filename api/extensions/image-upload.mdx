@@ -1,0 +1,270 @@
+---
+title: "Image Upload Plugin"
+description: "API reference for the image upload functionality"
+---
+
+## Overview
+
+The Image Upload plugin provides automatic image upload functionality when images are pasted or dropped into the editor. It supports both drag-and-drop and paste operations, with automatic upload to your configured storage.
+
+## Source Location
+
+Defined in `~/workspace/source/packages/core/src/ui/editor/plugins/upload-images.tsx:8-48`
+
+## Features
+
+- Automatic image paste detection
+- Drag and drop image upload
+- Image preview during upload
+- File type validation
+- File size validation (max 20MB)
+- Integration with Vercel Blob storage
+- Fallback to local preview when storage is not configured
+
+## API Reference
+
+### startImageUpload
+
+Initiates the image upload process.
+
+```typescript
+function startImageUpload(file: File, view: EditorView, pos: number): void
+```
+
+**Parameters:**
+
+<ParamField path="file" type="File" required>
+  The image file to upload.
+  
+  Must be a valid image type (checked via `file.type.includes("image/")`).
+</ParamField>
+
+<ParamField path="view" type="EditorView" required>
+  The ProseMirror EditorView instance.
+  
+  Used to dispatch transactions and update the editor state.
+</ParamField>
+
+<ParamField path="pos" type="number" required>
+  The position in the document where the image should be inserted.
+</ParamField>
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/plugins/upload-images.tsx:58-111`
+
+### handleImageUpload
+
+Handles the actual upload to the storage backend.
+
+```typescript
+function handleImageUpload(file: File): Promise<string | File>
+```
+
+**Parameters:**
+
+<ParamField path="file" type="File" required>
+  The image file to upload.
+</ParamField>
+
+**Returns:** Promise that resolves to either:
+- `string`: The URL of the uploaded image
+- `File`: The original file (if upload fails or storage is not configured)
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/plugins/upload-images.tsx:113-153`
+
+## Validation
+
+### File Type Validation
+
+Only image files are accepted:
+
+```typescript
+if (!file.type.includes("image/")) {
+  toast.error("File type not supported.");
+  return;
+}
+```
+
+### File Size Validation
+
+Maximum file size is 20MB:
+
+```typescript
+if (file.size / 1024 / 1024 > 20) {
+  toast.error("File size too big (max 20MB).");
+  return;
+}
+```
+
+## Usage Examples
+
+### Default Behavior
+
+The image upload plugin is included by default in Novel's editor props:
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  // Image upload is automatically enabled
+  return <Editor />;
+}
+```
+
+### Paste Images
+
+Users can paste images directly from their clipboard:
+
+1. Copy an image (from browser, screenshot tool, etc.)
+2. Paste into the editor (Cmd/Ctrl + V)
+3. Image is automatically uploaded and inserted
+
+### Drag and Drop Images
+
+Users can drag and drop images from their file system:
+
+1. Drag an image file from file explorer
+2. Drop it onto the editor
+3. Image is automatically uploaded and inserted at the drop position
+
+### Programmatic Upload
+
+You can trigger image upload programmatically:
+
+```typescript
+import { startImageUpload } from "novel";
+import { EditorView } from "@tiptap/pm/view";
+
+function uploadImage(file: File, view: EditorView) {
+  const pos = view.state.selection.from;
+  startImageUpload(file, view, pos);
+}
+```
+
+## Upload Endpoint
+
+The plugin uploads to `/api/upload` by default. You need to implement this endpoint:
+
+```typescript
+// app/api/upload/route.ts
+import { put } from "@vercel/blob";
+import { NextResponse } from "next/server";
+
+export async function POST(request: Request) {
+  const file = request.body;
+  const filename = request.headers.get("x-vercel-filename") || "image.png";
+  const contentType = request.headers.get("content-type") || "application/octet-stream";
+
+  const blob = await put(filename, file, {
+    contentType,
+    access: "public",
+  });
+
+  return NextResponse.json(blob);
+}
+```
+
+<Warning>
+  You must configure the `BLOB_READ_WRITE_TOKEN` environment variable for image uploads to work. Without it, images will be displayed as base64 data URLs locally.
+</Warning>
+
+## Storage Configuration
+
+### Vercel Blob (Recommended)
+
+1. Install the Vercel Blob package:
+
+```bash
+npm install @vercel/blob
+```
+
+2. Add your token to `.env.local`:
+
+```bash
+BLOB_READ_WRITE_TOKEN=your_token_here
+```
+
+3. The plugin will automatically use Vercel Blob for uploads
+
+### Custom Storage Backend
+
+You can implement your own storage backend by modifying the `/api/upload` endpoint:
+
+```typescript
+// app/api/upload/route.ts
+import { NextResponse } from "next/server";
+
+export async function POST(request: Request) {
+  const file = request.body;
+  
+  // Upload to your custom storage (S3, Cloudinary, etc.)
+  const url = await uploadToYourStorage(file);
+  
+  return NextResponse.json({ url });
+}
+```
+
+## Upload Flow
+
+1. **File Validation**: Check file type and size
+2. **Placeholder Creation**: Show loading preview using base64 data URL
+3. **Upload Request**: POST to `/api/upload` with file data
+4. **Replace Placeholder**: Replace preview with uploaded image URL
+5. **Error Handling**: Show error toast if upload fails
+
+## Type Definitions
+
+```typescript
+import { EditorView } from "@tiptap/pm/view";
+import { BlobResult } from "@vercel/blob";
+
+// Plugin key for managing upload state
+const uploadKey: PluginKey<DecorationSet>;
+
+// Main upload functions
+function startImageUpload(file: File, view: EditorView, pos: number): void;
+function handleImageUpload(file: File): Promise<string | File>;
+```
+
+## Integration with Editor Props
+
+The image upload plugin is automatically integrated via the default editor props:
+
+```typescript
+// From props.ts
+export const defaultEditorProps: EditorProps = {
+  handlePaste: (view, event) => {
+    if (event.clipboardData?.files?.[0]) {
+      event.preventDefault();
+      const file = event.clipboardData.files[0];
+      const pos = view.state.selection.from;
+      startImageUpload(file, view, pos);
+      return true;
+    }
+    return false;
+  },
+  handleDrop: (view, event, _slice, moved) => {
+    if (!moved && event.dataTransfer?.files?.[0]) {
+      event.preventDefault();
+      const file = event.dataTransfer.files[0];
+      const coordinates = view.posAtCoords({
+        left: event.clientX,
+        top: event.clientY,
+      });
+      startImageUpload(file, view, coordinates?.pos || 0 - 1);
+      return true;
+    }
+    return false;
+  },
+};
+```
+
+Source: `~/workspace/source/packages/core/src/ui/editor/props.ts:19-52`
+
+## Error Handling
+
+The plugin handles several error cases:
+
+- **Invalid file type**: Shows "File type not supported" toast
+- **File too large**: Shows "File size too big (max 20MB)" toast
+- **Missing token**: Shows warning and falls back to local base64 preview
+- **Upload failure**: Shows "Error uploading image. Please try again" toast

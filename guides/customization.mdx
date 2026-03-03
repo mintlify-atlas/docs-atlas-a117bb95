@@ -1,0 +1,281 @@
+---
+title: Customization
+description: Learn how to customize the Novel editor with className, editorProps, and other options
+---
+
+Novel provides extensive customization options to tailor the editor to your needs. This guide covers the main ways to customize the editor's appearance and behavior.
+
+## Basic Customization
+
+The `Editor` component accepts several props that allow you to customize its behavior:
+
+```tsx
+import { Editor } from "novel";
+
+export default function MyEditor() {
+  return (
+    <Editor
+      className="custom-editor-styles"
+      defaultValue={defaultContent}
+      onUpdate={(editor) => {
+        console.log("Editor updated", editor?.getJSON());
+      }}
+      onDebouncedUpdate={(editor) => {
+        // Save to database
+        console.log("Saving...", editor?.getJSON());
+      }}
+      debounceDuration={1000}
+    />
+  );
+}
+```
+
+## Customizing the Editor Class
+
+The `className` prop allows you to add custom CSS classes to the editor container. The default className includes responsive styles:
+
+```tsx
+<Editor
+  className="novel-relative novel-min-h-[500px] novel-w-full novel-max-w-screen-lg novel-border-stone-200 novel-bg-white sm:novel-mb-[calc(20vh)] sm:novel-rounded-lg sm:novel-border sm:novel-shadow-lg"
+/>
+```
+
+You can override this with your own styles:
+
+```tsx
+<Editor className="my-custom-editor rounded-xl border-2 border-blue-500 p-4" />
+```
+
+## Custom Editor Props
+
+The `editorProps` prop allows you to pass custom properties to the underlying Tiptap editor. These props extend the default editor props:
+
+<Steps>
+
+### Step 1: Import EditorProps type
+
+```tsx
+import { Editor } from "novel";
+import { EditorProps } from "@tiptap/pm/view";
+```
+
+### Step 2: Define your custom props
+
+```tsx
+const customEditorProps: EditorProps = {
+  attributes: {
+    class: "prose prose-lg focus:outline-none max-w-full",
+    spellcheck: "false",
+  },
+  handleDOMEvents: {
+    keydown: (_view, event) => {
+      // Custom keyboard event handling
+      if (event.key === "Tab") {
+        // Prevent default tab behavior
+        return true;
+      }
+      return false;
+    },
+  },
+};
+```
+
+### Step 3: Pass to the Editor component
+
+```tsx
+<Editor editorProps={customEditorProps} />
+```
+
+</Steps>
+
+<Note>
+The `editorProps` you provide will be merged with Novel's default editor props, which include paste and drop handlers for images.
+</Note>
+
+## Default Editor Props Reference
+
+Novel's default `editorProps` include:
+
+```ts
+export const defaultEditorProps: EditorProps = {
+  attributes: {
+    class: `novel-prose-lg novel-prose-stone dark:novel-prose-invert prose-headings:novel-font-title novel-font-default focus:novel-outline-none novel-max-w-full`,
+  },
+  handleDOMEvents: {
+    keydown: (_view, event) => {
+      // prevent default event listeners from firing when slash command is active
+      if (["ArrowUp", "ArrowDown", "Enter"].includes(event.key)) {
+        const slashCommand = document.querySelector("#slash-command");
+        if (slashCommand) {
+          return true;
+        }
+      }
+    },
+  },
+  handlePaste: (view, event) => {
+    // Handle image paste
+    if (
+      event.clipboardData &&
+      event.clipboardData.files &&
+      event.clipboardData.files[0]
+    ) {
+      event.preventDefault();
+      const file = event.clipboardData.files[0];
+      const pos = view.state.selection.from;
+      startImageUpload(file, view, pos);
+      return true;
+    }
+    return false;
+  },
+  handleDrop: (view, event, _slice, moved) => {
+    // Handle image drop
+    if (
+      !moved &&
+      event.dataTransfer &&
+      event.dataTransfer.files &&
+      event.dataTransfer.files[0]
+    ) {
+      event.preventDefault();
+      const file = event.dataTransfer.files[0];
+      const coordinates = view.posAtCoords({
+        left: event.clientX,
+        top: event.clientY,
+      });
+      startImageUpload(file, view, coordinates?.pos || 0 - 1);
+      return true;
+    }
+    return false;
+  },
+};
+```
+
+## Local Storage Configuration
+
+<Steps>
+
+### Step 1: Enable/Disable Local Storage
+
+By default, Novel saves content to local storage. You can disable this:
+
+```tsx
+<Editor disableLocalStorage={true} />
+```
+
+### Step 2: Custom Storage Key
+
+Customize the local storage key:
+
+```tsx
+<Editor storageKey="my-custom-key" />
+```
+
+### Step 3: Set Default Value
+
+Provide default content as JSON or string:
+
+```tsx
+const defaultValue = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "Welcome to the editor!",
+        },
+      ],
+    },
+  ],
+};
+
+<Editor defaultValue={defaultValue} />;
+```
+
+</Steps>
+
+## Update Callbacks
+
+<Tabs>
+  <Tab title="onUpdate">
+    Called on every editor change:
+
+    ```tsx
+    <Editor
+      onUpdate={(editor) => {
+        const json = editor?.getJSON();
+        const html = editor?.getHTML();
+        console.log("Content:", json);
+      }}
+    />
+    ```
+  </Tab>
+  
+  <Tab title="onDebouncedUpdate">
+    Called after a debounce period (default 750ms):
+
+    ```tsx
+    <Editor
+      onDebouncedUpdate={async (editor) => {
+        const json = editor?.getJSON();
+        await saveToDatabase(json);
+      }}
+      debounceDuration={1000}
+    />
+    ```
+  </Tab>
+</Tabs>
+
+## Complete Example
+
+Here's a complete example from the Novel demo app:
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Editor as NovelEditor } from "novel";
+
+export default function Editor() {
+  const [saveStatus, setSaveStatus] = useState("Saved");
+
+  return (
+    <div className="relative w-full max-w-screen-lg">
+      <div className="absolute right-5 top-5 z-10 mb-5 rounded-lg bg-stone-100 px-2 py-1 text-sm text-stone-400">
+        {saveStatus}
+      </div>
+      <NovelEditor
+        onUpdate={() => {
+          setSaveStatus("Unsaved");
+        }}
+        onDebouncedUpdate={() => {
+          setSaveStatus("Saving...");
+          // Simulate a delay in saving.
+          setTimeout(() => {
+            setSaveStatus("Saved");
+          }, 500);
+        }}
+      />
+    </div>
+  );
+}
+```
+
+<Warning>
+When providing custom `editorProps`, be careful not to override important handlers like `handlePaste` and `handleDrop` unless you want to completely replace the default image upload behavior.
+</Warning>
+
+## All Available Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `completionApi` | `string` | `/api/generate` | API route for AI completions |
+| `className` | `string` | See above | CSS classes for editor container |
+| `defaultValue` | `JSONContent \| string` | Default content | Initial editor content |
+| `extensions` | `Extensions` | `[]` | Additional Tiptap extensions |
+| `editorProps` | `EditorProps` | `{}` | Additional Tiptap editor props |
+| `onUpdate` | `function` | `() => {}` | Called on every update |
+| `onDebouncedUpdate` | `function` | `() => {}` | Called after debounce |
+| `debounceDuration` | `number` | `750` | Debounce duration in ms |
+| `storageKey` | `string` | `novel__content` | Local storage key |
+| `disableLocalStorage` | `boolean` | `false` | Disable local storage |

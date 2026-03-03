@@ -1,0 +1,221 @@
+---
+title: "Editor"
+description: "Complete API reference for the Novel Editor component"
+---
+
+## Overview
+
+The `Editor` component is the main component of the Novel editor. It provides a rich text editing experience with AI-powered autocomplete, slash commands, and more.
+
+## Import
+
+```typescript
+import Editor from "novel";
+```
+
+## Props
+
+The Editor component accepts the following props:
+
+<ParamField path="completionApi" type="string" default="/api/generate">
+  The API route to use for the OpenAI completion API.
+  
+  This endpoint is called when users trigger AI autocomplete with `++` or use slash commands.
+</ParamField>
+
+<ParamField path="className" type="string" default="novel-relative novel-min-h-[500px] novel-w-full novel-max-w-screen-lg novel-border-stone-200 novel-bg-white sm:novel-mb-[calc(20vh)] sm:novel-rounded-lg sm:novel-border sm:novel-shadow-lg">
+  Additional classes to add to the editor container.
+  
+  All classes are prefixed with `novel-` to avoid conflicts with your application's styles.
+</ParamField>
+
+<ParamField path="defaultValue" type="JSONContent | string">
+  The default value to use for the editor.
+  
+  Can be either a Tiptap JSONContent object or a plain string. Defaults to the Novel default content.
+</ParamField>
+
+<ParamField path="extensions" type="Extensions" default="[]">
+  A list of extensions to use for the editor, in addition to the default Novel extensions.
+  
+  These extensions are added to the default extensions provided by Novel. See the [Extensions concept](/concepts/extensions) for more information.
+</ParamField>
+
+<ParamField path="editorProps" type="EditorProps" default="{}">
+  Props to pass to the underlying Tiptap editor, in addition to the default Novel editor props.
+  
+  These props are merged with Novel's default editor props. See the [Tiptap documentation](https://tiptap.dev/docs/editor/api/editor#editor-props) for available options.
+</ParamField>
+
+<ParamField path="onUpdate" type="(editor?: EditorClass) => void | Promise<void>" default="() => {}">
+  A callback function that is called whenever the editor is updated.
+  
+  This callback is triggered on every change to the editor content.
+</ParamField>
+
+<ParamField path="onDebouncedUpdate" type="(editor?: EditorClass) => void | Promise<void>" default="() => {}">
+  A callback function that is called whenever the editor is updated, but only after the defined debounce duration.
+  
+  This is useful for saving content to a database or API without making too many requests.
+</ParamField>
+
+<ParamField path="debounceDuration" type="number" default="750">
+  The duration (in milliseconds) to debounce the `onDebouncedUpdate` callback.
+</ParamField>
+
+<ParamField path="storageKey" type="string" default="novel__content">
+  The key to use for storing the editor's value in local storage.
+  
+  Content is automatically saved to localStorage unless `disableLocalStorage` is true.
+</ParamField>
+
+<ParamField path="disableLocalStorage" type="boolean" default="false">
+  Disable local storage read/save.
+  
+  When true, the editor will not read from or save to localStorage.
+</ParamField>
+
+## Usage Examples
+
+### Basic Usage
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  return <Editor />;
+}
+```
+
+### Custom Completion API
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  return <Editor completionApi="/api/my-completion" />;
+}
+```
+
+### With Update Callbacks
+
+```tsx
+import Editor from "novel";
+import { Editor as EditorClass } from "@tiptap/core";
+
+export default function MyEditor() {
+  const handleUpdate = (editor?: EditorClass) => {
+    console.log("Editor updated", editor?.getJSON());
+  };
+
+  const handleDebouncedUpdate = async (editor?: EditorClass) => {
+    const content = editor?.getJSON();
+    await fetch("/api/save", {
+      method: "POST",
+      body: JSON.stringify(content),
+    });
+  };
+
+  return (
+    <Editor
+      onUpdate={handleUpdate}
+      onDebouncedUpdate={handleDebouncedUpdate}
+      debounceDuration={1000}
+    />
+  );
+}
+```
+
+### With Custom Extensions
+
+```tsx
+import Editor from "novel";
+import { Color } from "@tiptap/extension-color";
+import { TextStyle } from "@tiptap/extension-text-style";
+
+export default function MyEditor() {
+  return (
+    <Editor
+      extensions={[
+        // Add your custom extensions here
+      ]}
+    />
+  );
+}
+```
+
+### Disable Local Storage
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  return (
+    <Editor
+      disableLocalStorage={true}
+      defaultValue="Start writing..."
+    />
+  );
+}
+```
+
+### Custom Styling
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  return (
+    <Editor
+      className="novel-relative novel-min-h-[300px] novel-w-full novel-rounded-md novel-border novel-p-4"
+    />
+  );
+}
+```
+
+## Features
+
+### AI Autocomplete
+
+Type `++` anywhere in the editor to trigger AI autocomplete. The editor will use the `completionApi` endpoint to generate suggestions based on the previous content.
+
+<Warning>
+  AI autocomplete requires a valid completion API endpoint. See the [AI Integration](/guides/ai-integration) guide for setup instructions.
+</Warning>
+
+### Slash Commands
+
+Type `/` to open the slash command menu. This provides quick access to formatting options, AI features, and more.
+
+### Local Storage
+
+By default, the editor automatically saves content to localStorage. This ensures that users don't lose their work if they accidentally close the tab or navigate away.
+
+## Default Editor Props
+
+The editor includes the following default props from `~/workspace/source/packages/core/src/ui/editor/props.ts:4-53`:
+
+- **Paste handling**: Automatically handles image paste events
+- **Drop handling**: Automatically handles image drop events
+- **Keyboard handling**: Special handling for slash command navigation
+
+## Type Definitions
+
+```typescript
+import { EditorProps } from "@tiptap/pm/view";
+import { Editor as EditorClass, Extensions } from "@tiptap/core";
+import { JSONContent } from "@tiptap/react";
+
+interface EditorComponentProps {
+  completionApi?: string;
+  className?: string;
+  defaultValue?: JSONContent | string;
+  extensions?: Extensions;
+  editorProps?: EditorProps;
+  onUpdate?: (editor?: EditorClass) => void | Promise<void>;
+  onDebouncedUpdate?: (editor?: EditorClass) => void | Promise<void>;
+  debounceDuration?: number;
+  storageKey?: string;
+  disableLocalStorage?: boolean;
+}
+```

@@ -1,0 +1,254 @@
+---
+title: "SlashCommand Extension"
+description: "API reference for the SlashCommand extension"
+---
+
+## Overview
+
+The `SlashCommand` extension provides a command palette that appears when users type `/` in the editor. It offers quick access to formatting options, AI features, and custom commands.
+
+## Source Location
+
+Defined in `~/workspace/source/packages/core/src/ui/editor/extensions/slash-command.tsx:48-76`
+
+## Configuration
+
+The SlashCommand extension is pre-configured with default items and render behavior. It's included in the default Novel extensions.
+
+```typescript
+const SlashCommand = Command.configure({
+  suggestion: {
+    items: getSuggestionItems,
+    render: renderItems,
+  },
+});
+```
+
+## Default Commands
+
+The slash command menu includes the following built-in commands:
+
+### AI Commands
+
+<ParamField path="Continue writing" type="AI Command">
+  Uses AI to expand your thoughts and continue writing based on the previous content.
+  
+  Triggers the completion API with the previous 5000 characters of text.
+</ParamField>
+
+### Formatting Commands
+
+<ParamField path="Text" type="Format Command">
+  Convert the current block to plain paragraph text.
+  
+  **Keyboard shortcut**: Type `/text` or `/p`
+</ParamField>
+
+<ParamField path="Heading 1" type="Format Command">
+  Create a big section heading.
+  
+  **Keyboard shortcut**: Type `/h1` or `/title`
+</ParamField>
+
+<ParamField path="Heading 2" type="Format Command">
+  Create a medium section heading.
+  
+  **Keyboard shortcut**: Type `/h2` or `/subtitle`
+</ParamField>
+
+<ParamField path="Heading 3" type="Format Command">
+  Create a small section heading.
+  
+  **Keyboard shortcut**: Type `/h3`
+</ParamField>
+
+<ParamField path="To-do List" type="Format Command">
+  Track tasks with a to-do list.
+  
+  **Keyboard shortcut**: Type `/todo` or `/task`
+</ParamField>
+
+<ParamField path="Bullet List" type="Format Command">
+  Create a simple bullet list.
+  
+  **Keyboard shortcut**: Type `/ul` or `/bullet`
+</ParamField>
+
+<ParamField path="Numbered List" type="Format Command">
+  Create a list with numbering.
+  
+  **Keyboard shortcut**: Type `/ol` or `/ordered`
+</ParamField>
+
+<ParamField path="Quote" type="Format Command">
+  Capture a quote with blockquote formatting.
+  
+  **Keyboard shortcut**: Type `/quote` or `/blockquote`
+</ParamField>
+
+<ParamField path="Code" type="Format Command">
+  Capture a code snippet with syntax highlighting.
+  
+  **Keyboard shortcut**: Type `/code` or `/codeblock`
+</ParamField>
+
+<ParamField path="Image" type="Format Command">
+  Upload an image from your computer.
+  
+  **Keyboard shortcut**: Type `/image` or `/photo`
+</ParamField>
+
+## Usage Examples
+
+### Basic Usage
+
+The SlashCommand extension is included by default, so you don't need to add it manually:
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  // SlashCommand is already included
+  return <Editor />;
+}
+```
+
+### Using Slash Commands
+
+1. Type `/` anywhere in the editor
+2. A menu will appear with available commands
+3. Type to filter commands (e.g., `/head` shows heading options)
+4. Use arrow keys to navigate
+5. Press Enter to execute the selected command
+
+### Keyboard Navigation
+
+- **ArrowUp**: Move to previous command
+- **ArrowDown**: Move to next command  
+- **Enter**: Execute selected command
+- **Escape**: Close the menu
+
+## API Reference
+
+### Extension Options
+
+<ParamField path="suggestion.char" type="string" default="/">
+  The character that triggers the slash command menu.
+</ParamField>
+
+<ParamField path="suggestion.command" type="function">
+  The function called when a command is executed.
+  
+  **Parameters:**
+  - `editor`: The Tiptap editor instance
+  - `range`: The text range to replace
+  - `props`: Command properties
+</ParamField>
+
+### Helper Functions
+
+#### getSuggestionItems
+
+Filters and returns available commands based on the search query.
+
+```typescript
+function getSuggestionItems({ query }: { query: string }): CommandItemProps[]
+```
+
+**Parameters:**
+- `query`: The search string entered by the user
+
+**Returns:** Array of filtered command items
+
+#### updateScrollView
+
+Updates the scroll position of the command menu to keep the selected item visible.
+
+```typescript
+function updateScrollView(container: HTMLElement, item: HTMLElement): void
+```
+
+**Parameters:**
+- `container`: The menu container element
+- `item`: The selected item element
+
+Source: `~/workspace/source/packages/core/src/ui/editor/extensions/slash-command.tsx:242-254`
+
+## Type Definitions
+
+```typescript
+interface CommandItemProps {
+  title: string;
+  description: string;
+  icon: ReactNode;
+  ai: string;
+}
+
+interface CommandProps {
+  editor: Editor;
+  range: Range;
+}
+```
+
+Source: `~/workspace/source/packages/core/src/ui/editor/extensions/slash-command.tsx:36-46`
+
+## Customization
+
+### Adding Custom Commands
+
+To add custom slash commands, you'll need to create your own version of the SlashCommand extension:
+
+```typescript
+import { Extension } from "@tiptap/core";
+import Suggestion from "@tiptap/suggestion";
+
+const CustomSlashCommand = Extension.create({
+  name: "slash-command",
+  addOptions() {
+    return {
+      suggestion: {
+        char: "/",
+        command: ({ editor, range, props }) => {
+          props.command({ editor, range });
+        },
+      },
+    };
+  },
+  addProseMirrorPlugins() {
+    return [
+      Suggestion({
+        editor: this.editor,
+        ...this.options.suggestion,
+      }),
+    ];
+  },
+});
+```
+
+### Custom Command Items
+
+```typescript
+const customCommands = [
+  {
+    title: "Custom Command",
+    description: "Does something custom",
+    icon: <YourIcon />,
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).run();
+      // Your custom logic here
+    },
+  },
+];
+```
+
+<Warning>
+  Creating custom slash commands requires replacing the default SlashCommand extension. Make sure to remove the default extension from your configuration if you're adding a custom one.
+</Warning>
+
+## Implementation Details
+
+- Built on top of [Tiptap Suggestion](https://tiptap.dev/docs/editor/api/utilities/suggestion)
+- Uses [Tippy.js](https://atomiks.github.io/tippyjs/) for positioning
+- Integrates with the AI completion API for "Continue writing" command
+- Filters commands based on title, description, and search terms
+- Automatically scrolls to keep selected item visible

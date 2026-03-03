@@ -1,0 +1,479 @@
+---
+title: 'AI Completions'
+description: 'How Novel integrates AI-powered text generation with the ++ trigger and completion API'
+---
+
+## Overview
+
+Novel includes built-in AI completion functionality that lets users generate text on-demand. By typing `++` anywhere in the document, Novel sends context to your API and streams the AI response directly into the editor.
+
+<Info>
+AI completions are powered by Vercel's `ai/react` library using the `useCompletion` hook. You provide the API endpoint, Novel handles the rest.
+</Info>
+
+## How It Works
+
+### The ++ Trigger
+
+When a user types `++`, Novel:
+
+1. Detects the trigger in the `onUpdate` handler
+2. Deletes the `++` characters from the document
+3. Extracts the previous 5000 characters as context
+4. Calls your completion API
+5. Streams the response back, inserting text character-by-character
+
+```tsx
+// From index.tsx:104-125
+onUpdate: (e) => {
+  const selection = e.editor.state.selection;
+  const lastTwo = getPrevText(e.editor, {
+    chars: 2,
+  });
+  
+  if (lastTwo === "++" && !isLoading) {
+    e.editor.commands.deleteRange({
+      from: selection.from - 2,
+      to: selection.from,
+    });
+    complete(
+      getPrevText(e.editor, {
+        chars: 5000,
+      })
+    );
+    va.track("Autocomplete Shortcut Used");
+  } else {
+    onUpdate(e.editor);
+    debouncedUpdates(e);
+  }
+}
+```
+
+**Key implementation details:**
+
+- `getPrevText()` extracts plain text content before the cursor (see `lib/editor.ts:3-21`)
+- Only triggers if `!isLoading` to prevent multiple simultaneous requests
+- The `++` is removed before calling the API so users see a clean experience
+- Analytics tracking via `va.track()` for usage monitoring
+
+### Context Extraction
+
+The `getPrevText` helper function extracts context:
+
+```tsx
+// From lib/editor.ts:3-21
+export const getPrevText = (
+  editor: Editor,
+  {
+    chars,
+    offset = 0,
+  }: {
+    chars: number;
+    offset?: number;
+  }
+) => {
+  return editor.state.doc.textBetween(
+    Math.max(0, editor.state.selection.from - chars),
+    editor.state.selection.from - offset,
+    "\n"
+  );
+};
+```
+
+**Why 5000 characters?** This provides enough context for the AI to understand what the user is writing about without hitting token limits. The text is extracted using `textBetween()` which preserves paragraph breaks.
+
+<Tip>
+The `offset` parameter allows skipping characters at the cursor position. It's used when deleting the `++` trigger to exclude it from context.
+</Tip>
+
+## Completion API Integration
+
+Novel uses Vercel AI SDK's `useCompletion` hook:
+
+```tsx
+// From index.tsx:129-144
+const { complete, completion, isLoading, stop } = useCompletion({
+  id: "novel",
+  api: completionApi,
+  onFinish: (_prompt, completion) => {
+    editor?.commands.setTextSelection({
+      from: editor.state.selection.from - completion.length,
+      to: editor.state.selection.from,
+    });
+  },
+  onError: (err) => {
+    toast.error(err.message);
+    if (err.message === "You have reached your request limit for the day.") {
+      va.track("Rate Limit Reached");
+    }
+  },
+});
+```
+
+### Configuration Options
+
+<ParamField path="id" type="string" default="novel">
+  Unique identifier for the completion request. Helps with deduplication.
+</ParamField>
+
+<ParamField path="api" type="string">
+  Your API endpoint (from `completionApi` prop). Defaults to `/api/generate`.
+</ParamField>
+
+<ParamField path="onFinish" type="function">
+  Called when streaming completes. Novel selects the generated text so users can easily delete or modify it.
+</ParamField>
+
+<ParamField path="onError" type="function">
+  Error handler. Shows toast notification and tracks rate limit errors.
+</ParamField>
+
+### API Endpoint Requirements
+
+Your completion API must:
+
+1. Accept POST requests with a `prompt` field
+2. Return a streaming text response
+3. Use the Vercel AI SDK or compatible format
+
+Example implementation:
+
+```typescript
+import { OpenAIStream, StreamingTextResponse } from "ai";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      {
+        role: "system",
+        content: "You are a helpful writing assistant. Continue the user's text naturally.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    stream: true,
+  });
+
+  const stream = OpenAIStream(response);
+  return new StreamingTextResponse(stream);
+}
+```
+
+<Warning>
+Make sure to implement rate limiting and authentication on your API endpoint. Novel does not include these security features.
+</Warning>
+
+## Streaming Response
+
+Novel streams AI responses in real-time for a better UX:
+
+```tsx
+// From index.tsx:146-153
+const prev = useRef("");
+
+useEffect(() => {
+  const diff = completion.slice(prev.current.length);
+  prev.current = completion;
+  editor?.commands.insertContent(diff);
+}, [isLoading, editor, completion]);
+```
+
+**How it works:**
+
+1. `useCompletion` updates the `completion` state as chunks arrive
+2. Effect calculates the "diff" (new characters since last update)
+3. Only the diff is inserted into the editor
+4. `prev.current` stores the previous completion length
+
+**Why this approach?** Inserting only the diff prevents re-rendering the entire completion on every chunk, which would cause flickering and cursor jumps.
+
+## User Interruption
+
+Users can interrupt AI generation:
+
+### Keyboard Interrupts
+
+```tsx
+// From index.tsx:155-189
+useEffect(() => {
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape" || (e.metaKey && e.key === "z")) {
+      stop();
+      if (e.key === "Escape") {
+        editor?.commands.deleteRange({
+          from: editor.state.selection.from - completion.length,
+          to: editor.state.selection.from,
+        });
+      }
+      editor?.commands.insertContent("++");
+    }
+  };
+  
+  if (isLoading) {
+    document.addEventListener("keydown", onKeyDown);
+  } else {
+    document.removeEventListener("keydown", onKeyDown);
+  }
+  
+  return () => {
+    document.removeEventListener("keydown", onKeyDown);
+  };
+}, [stop, isLoading, editor, completion.length]);
+```
+
+**Interrupt behaviors:**
+
+<CardGroup cols={2}>
+  <Card title="Escape Key">
+    Stops generation, deletes all generated text, restores `++` trigger
+  </Card>
+  <Card title="Cmd/Ctrl+Z">
+    Stops generation, keeps generated text, restores `++` trigger (lets user undo manually)
+  </Card>
+</CardGroup>
+
+### Mouse Click Interrupt
+
+```tsx
+// From index.tsx:170-177
+const mousedownHandler = (e: MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  stop();
+  if (window.confirm("AI writing paused. Continue?")) {
+    complete(editor?.getText() || "");
+  }
+};
+
+if (isLoading) {
+  window.addEventListener("mousedown", mousedownHandler);
+}
+```
+
+**User experience:**
+- Clicking anywhere stops the stream
+- Shows confirmation dialog
+- If user confirms, restarts completion with full document as context
+
+<Note>
+Using `mousedown` instead of `click` ensures immediate response before any click handlers fire.
+</Note>
+
+## Slash Command Integration
+
+AI completions are also accessible via the slash command menu:
+
+```tsx
+// From extensions/slash-command.tsx:300-308
+if (item.title === "Continue writing") {
+  if (isLoading) return;
+  complete(
+    getPrevText(editor, {
+      chars: 5000,
+      offset: 1,
+    })
+  );
+}
+```
+
+The "Continue writing" option triggers the same completion flow as `++`, extracting 5000 characters of context with an `offset: 1` to exclude the slash character.
+
+### Slash Command AI Items
+
+From `extensions/slash-command.tsx:78-92`:
+
+```tsx
+{
+  title: "Continue writing",
+  description: "Use AI to expand your thoughts.",
+  searchTerms: ["gpt"],
+  icon: <Magic className="novel-w-7" />,
+},
+{
+  title: "Ask a question AI",
+  description: "Use AI to answer your question.",
+  ai: "AIQuestionAI",
+  searchTerms: ["gpt"],
+  icon: <Magic className="w-7" />,
+}
+```
+
+These appear when typing `/` and can be filtered by typing "gpt".
+
+## Text Selection After Completion
+
+When AI finishes generating, Novel selects the generated text:
+
+```tsx
+// From index.tsx:132-137
+onFinish: (_prompt, completion) => {
+  editor?.commands.setTextSelection({
+    from: editor.state.selection.from - completion.length,
+    to: editor.state.selection.from,
+  });
+}
+```
+
+**Why auto-select?** This lets users immediately:
+- Delete unwanted completions (press Backspace)
+- Continue typing to replace
+- Copy the generated text
+- Apply formatting
+
+## Analytics Tracking
+
+Novel tracks AI usage via Vercel Analytics:
+
+```tsx
+// When ++ is typed
+va.track("Autocomplete Shortcut Used");
+
+// When rate limited
+va.track("Rate Limit Reached");
+
+// When slash command used
+va.track("Slash Command Used", {
+  command: item.title,
+});
+```
+
+This helps you understand how users interact with AI features.
+
+## Context Provider
+
+The `completionApi` is shared via React Context:
+
+```tsx
+// From index.tsx:205-209
+<NovelContext.Provider
+  value={{
+    completionApi,
+  }}
+>
+  {/* editor content */}
+</NovelContext.Provider>
+```
+
+The SlashCommand component accesses it:
+
+```tsx
+// From extensions/slash-command.tsx:269-273
+const { completionApi } = useContext(NovelContext);
+
+const { complete, isLoading } = useCompletion({
+  id: "novel",
+  api: completionApi,
+  // ...
+});
+```
+
+This ensures both the `++` trigger and slash commands use the same API endpoint.
+
+## Customizing AI Behavior
+
+You can customize AI completions by:
+
+### 1. Changing the API Endpoint
+
+```tsx
+<Editor completionApi="/api/custom-completion" />
+```
+
+### 2. Modifying Context Length
+
+Currently hardcoded to 5000 chars. To change, you'd need to fork and modify:
+
+```tsx
+// In your fork
+complete(
+  getPrevText(e.editor, {
+    chars: 10000, // More context
+  })
+)
+```
+
+### 3. Custom Prompts
+
+Modify your API endpoint to add system prompts, temperature settings, etc.
+
+### 4. Different Triggers
+
+Replace `++` detection:
+
+```tsx
+const lastThree = getPrevText(e.editor, { chars: 3 });
+if (lastThree === "ai:") {
+  // Your custom trigger
+}
+```
+
+<Warning>
+Modifying the core editor component requires forking Novel. Consider whether you can achieve your goals by customizing the API endpoint instead.
+</Warning>
+
+## Error Handling
+
+Novel handles completion errors gracefully:
+
+```tsx
+onError: (err) => {
+  toast.error(err.message);
+  if (err.message === "You have reached your request limit for the day.") {
+    va.track("Rate Limit Reached");
+  }
+}
+```
+
+Errors are displayed via `sonner` toast notifications. Common error scenarios:
+
+- **Rate limiting**: API returns 429 status
+- **Network errors**: Request fails or times out
+- **API errors**: OpenAI or LLM errors
+
+<Tip>
+Implement robust error handling in your API endpoint. Return user-friendly messages that Novel can display in toasts.
+</Tip>
+
+## Performance Considerations
+
+### Why Streaming?
+
+Streaming provides immediate feedback. Without it, users would wait 5-30 seconds seeing nothing, wondering if it's working.
+
+### Context Window Size
+
+5000 characters balances:
+- **Enough context** for coherent completions
+- **Token limits** of most LLMs (5000 chars ≈ 1250 tokens)
+- **API latency** (smaller prompts = faster responses)
+
+### Debouncing
+
+The `isLoading` check prevents multiple simultaneous requests:
+
+```tsx
+if (lastTwo === "++" && !isLoading) {
+  // Only trigger if not already loading
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Extensions" icon="puzzle-piece" href="/concepts/extensions">
+    Learn about SlashCommand and other extensions
+  </Card>
+  <Card title="Editor Component" icon="code" href="/concepts/editor-component">
+    See how AI integrates with the editor lifecycle
+  </Card>
+</CardGroup>

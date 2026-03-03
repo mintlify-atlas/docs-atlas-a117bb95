@@ -1,0 +1,288 @@
+---
+title: "DragAndDrop Extension"
+description: "API reference for the DragAndDrop extension"
+---
+
+## Overview
+
+The `DragAndDrop` extension adds a visual drag handle to editor blocks, allowing users to reorder content by dragging and dropping blocks. This provides an intuitive way to restructure documents.
+
+## Source Location
+
+Defined in `~/workspace/source/packages/core/src/ui/editor/extensions/drag-and-drop.tsx:201-213`
+
+## Features
+
+- Visual drag handle appears on hover
+- Click to select entire block
+- Drag to reorder blocks
+- Automatic positioning based on block type
+- Supports paragraphs, headings, lists, blockquotes, and code blocks
+- Hides during keyboard usage and scrolling
+
+## Configuration
+
+The DragAndDrop extension is pre-configured and included in the default Novel extensions.
+
+```typescript
+const DragAndDrop = Extension.create<DragAndDropOptions>({
+  name: "dragAndDrop",
+  addProseMirrorPlugins() {
+    return [
+      DragHandle({
+        dragHandleWidth: 24,
+      }),
+    ];
+  },
+});
+```
+
+## Options
+
+<ParamField path="dragHandleWidth" type="number" default="24">
+  The width of the drag handle in pixels.
+  
+  This determines the size of the interactive area for the drag handle.
+</ParamField>
+
+## Usage Examples
+
+### Default Behavior
+
+The DragAndDrop extension is included by default:
+
+```tsx
+import Editor from "novel";
+
+export default function MyEditor() {
+  // DragAndDrop is already included
+  return <Editor />;
+}
+```
+
+### User Interaction
+
+1. **Hover** over any block to reveal the drag handle
+2. **Click** the handle to select the entire block
+3. **Drag** the handle to move the block to a new position
+4. **Drop** to place the block in its new location
+
+### Supported Block Types
+
+The drag handle appears for:
+- Paragraphs
+- Headings (h1-h6)
+- Lists (bullet and ordered)
+- Blockquotes
+- Code blocks
+- Task lists
+
+## API Reference
+
+### DragHandle Plugin
+
+The internal plugin that manages drag handle behavior.
+
+```typescript
+function DragHandle(options: DragHandleOptions): Plugin
+```
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/drag-and-drop.tsx:50-197`
+
+### Helper Functions
+
+#### absoluteRect
+
+Calculates the absolute position and dimensions of a DOM node.
+
+```typescript
+function absoluteRect(node: Element): { top: number; left: number; width: number }
+```
+
+**Parameters:**
+<ParamField path="node" type="Element" required>
+  The DOM element to measure.
+</ParamField>
+
+**Returns:** Object containing `top`, `left`, and `width` values.
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/drag-and-drop.tsx:13-21`
+
+#### nodeDOMAtCoords
+
+Finds the ProseMirror node at specific coordinates.
+
+```typescript
+function nodeDOMAtCoords(coords: { x: number; y: number }): Element | undefined
+```
+
+**Parameters:**
+<ParamField path="coords" type="{ x: number; y: number }" required>
+  The x and y coordinates to check.
+</ParamField>
+
+**Returns:** The DOM element at the coordinates, or undefined.
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/drag-and-drop.tsx:23-39`
+
+#### nodePosAtDOM
+
+Finds the ProseMirror position of a DOM node.
+
+```typescript
+function nodePosAtDOM(node: Element, view: EditorView): number | undefined
+```
+
+**Parameters:**
+<ParamField path="node" type="Element" required>
+  The DOM element to find the position of.
+</ParamField>
+
+<ParamField path="view" type="EditorView" required>
+  The ProseMirror EditorView instance.
+</ParamField>
+
+**Returns:** The position in the document, or undefined.
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/drag-and-drop.tsx:41-48`
+
+## Behavior Details
+
+### Handle Visibility
+
+The drag handle:
+- **Shows** on mouse hover over supported blocks
+- **Hides** on keyboard input
+- **Hides** on mouse wheel scroll
+- **Hides** when mouse moves away from blocks
+
+### Handle Positioning
+
+The handle is positioned:
+- To the left of the block content
+- Vertically centered with the first line of text
+- Adjusted for padding and line height
+- Further left for list items to avoid markers
+
+### Click Behavior
+
+Clicking the drag handle:
+1. Selects the entire block (NodeSelection)
+2. Focuses the editor
+3. Allows immediate typing or formatting
+
+### Drag Behavior
+
+Dragging the handle:
+1. Creates a NodeSelection of the block
+2. Serializes the content for clipboard
+3. Sets drag data (HTML and plain text)
+4. Shows drag preview using the actual block
+5. Allows drop at any valid position
+
+## Styling
+
+The drag handle requires CSS styling. Add this to your stylesheet:
+
+```css
+.drag-handle {
+  position: fixed;
+  opacity: 0;
+  transition: opacity 0.2s;
+  height: 24px;
+  width: 24px;
+  cursor: grab;
+  background: url('data:image/svg+xml,...') no-repeat center;
+  z-index: 10;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+}
+
+.drag-handle.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dragging {
+  cursor: grabbing;
+}
+```
+
+## Type Definitions
+
+```typescript
+import { Extension } from "@tiptap/core";
+import { Plugin } from "@tiptap/pm/state";
+import { EditorView } from "@tiptap/pm/view";
+
+export interface DragHandleOptions {
+  /**
+   * The width of the drag handle
+   */
+  dragHandleWidth: number;
+}
+
+interface DragAndDropOptions {}
+
+const DragAndDrop: Extension<DragAndDropOptions>;
+```
+
+**Source:** `~/workspace/source/packages/core/src/ui/editor/extensions/drag-and-drop.tsx:7-12,199-200`
+
+## Event Handlers
+
+The extension handles the following DOM events:
+
+### mousemove
+
+Tracks mouse position to show/hide and position the drag handle.
+
+```typescript
+mousemove: (view, event) => {
+  // Find node at cursor
+  // Calculate handle position
+  // Show/hide handle
+}
+```
+
+### keydown
+
+Hides the drag handle when user starts typing.
+
+### mousewheel
+
+Hides the drag handle during scrolling.
+
+### dragstart
+
+Adds "dragging" class to editor for visual feedback.
+
+### drop
+
+Removes "dragging" class when drop completes.
+
+### dragend
+
+Removes "dragging" class if drag is cancelled.
+
+## Accessibility
+
+<Warning>
+  The drag handle is primarily a mouse-based interaction. Ensure your editor provides keyboard shortcuts for users who cannot use drag-and-drop.
+</Warning>
+
+Keyboard alternatives:
+- **Cmd/Ctrl + X**: Cut block
+- **Cmd/Ctrl + V**: Paste block
+- **Cmd/Ctrl + A**: Select block (when CustomKeymap is enabled)
+
+## Browser Compatibility
+
+The DragAndDrop extension uses:
+- Native HTML5 drag and drop API
+- `elementsFromPoint()` for element detection
+- `getBoundingClientRect()` for positioning
+
+Supported in all modern browsers (Chrome, Firefox, Safari, Edge).

@@ -1,0 +1,59 @@
+---
+title: Basic Usage
+description: Get started with the Novel editor using the simplest possible setup
+---
+
+## Overview
+
+This example demonstrates the most basic implementation of the Novel editor. With just a few lines of code, you get a fully-featured WYSIWYG editor with AI autocomplete, slash commands, and rich text formatting.
+
+## Basic Example
+
+```tsx
+import { Editor } from "novel";
+
+export default function App() {
+  return <Editor />;
+}
+```
+
+That's it! This gives you:
+- A fully-styled Notion-like editor
+- AI autocomplete (type `++` to activate)
+- Slash commands for formatting
+- Bubble menu for text selection
+- Image upload support (drag & drop or paste)
+- Automatic local storage persistence
+
+## What You Get By Default
+
+The editor comes pre-configured with:
+
+- **Default styling**: A clean, Notion-inspired design with responsive layout
+- **Default extensions**: Rich text formatting, lists, code blocks, images, links, and more
+- **AI completion**: Type `++` anywhere to trigger AI-powered text generation
+- **Local storage**: Content automatically saves to `localStorage` with key `"novel__content"`
+- **Default content**: Introductory content explaining Novel's features
+
+## Default Props
+
+When you use `<Editor />` without any props, these defaults are applied:
+
+| Prop | Default Value | Description |
+|------|--------------|-------------|
+| `completionApi` | `"/api/generate"` | API endpoint for AI completion |
+| `className` | Responsive styling classes | Container styling |
+| `defaultValue` | Novel introduction content | Initial editor content |
+| `debounceDuration` | `750` (ms) | Debounce duration for updates |
+| `storageKey` | `"novel__content"` | localStorage key |
+| `disableLocalStorage` | `false` | Local storage enabled by default |
+
+<Tip>
+  The editor requires minimal setup but is highly customizable. Check out the other examples to learn how to customize styling, handle updates, and configure AI completion.
+</Tip>
+
+## Next Steps
+
+- [Custom Styling](/examples/custom-styling) - Learn how to customize the editor's appearance
+- [With Callbacks](/examples/with-callbacks) - Handle content updates and implement autosave
+- [Custom AI API](/examples/custom-ai-api) - Configure your own AI completion endpoint

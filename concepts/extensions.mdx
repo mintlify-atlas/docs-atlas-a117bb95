@@ -1,0 +1,410 @@
+---
+title: 'Extensions'
+description: 'Understanding the extension system and how Novel extends Tiptap functionality'
+---
+
+## Overview
+
+Novel's power comes from its extension system. Extensions are modular pieces of functionality that add features to the editor—from basic text formatting to complex behaviors like slash commands and AI completions.
+
+<Info>
+Novel is built on [Tiptap](https://tiptap.dev/), which has a robust extension ecosystem. Novel provides a curated set of default extensions optimized for modern content editing.
+</Info>
+
+## Default Extensions
+
+The `defaultExtensions` array (defined in `packages/core/src/ui/editor/extensions/index.tsx`) includes 15+ extensions that work together:
+
+```tsx
+import { defaultExtensions } from "novel";
+import { Editor } from "novel";
+
+// Extensions are automatically included
+<Editor />
+
+// Or combine with your own
+<Editor extensions={[...defaultExtensions, MyCustomExtension]} />
+```
+
+### Core Extensions
+
+#### StarterKit
+
+Provides fundamental editing features. Novel configures it with custom styling:
+
+```tsx
+// From extensions/index.tsx:21-62
+StarterKit.configure({
+  bulletList: {
+    HTMLAttributes: {
+      class: "novel-list-disc novel-list-outside novel-leading-3 novel--mt-2",
+    },
+  },
+  orderedList: {
+    HTMLAttributes: {
+      class: "novel-list-decimal novel-list-outside novel-leading-3 novel--mt-2",
+    },
+  },
+  blockquote: {
+    HTMLAttributes: {
+      class: "novel-border-l-4 novel-border-stone-700",
+    },
+  },
+  codeBlock: {
+    HTMLAttributes: {
+      class: "novel-rounded-sm novel-bg-stone-100 novel-p-5 novel-font-mono novel-font-medium novel-text-stone-800",
+    },
+  },
+  // ... more configurations
+})
+```
+
+**What's included in StarterKit:**
+- Bold, Italic, Strike formatting
+- Headings (H1-H6)
+- Paragraphs
+- Bullet and ordered lists
+- Code blocks and inline code
+- Blockquotes
+- Hard breaks
+- Horizontal rules (disabled, see below)
+- History (undo/redo)
+- Drop cursor and gap cursor
+
+<Note>
+Novel disables StarterKit's default `horizontalRule` and `gapcursor` to provide custom implementations.
+</Note>
+
+#### HorizontalRule (Extended)
+
+Novel extends the default HorizontalRule to fix a Tiptap bug:
+
+```tsx
+// From extensions/index.tsx:64-88
+HorizontalRule.extend({
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /^(?:---|—-|___\s|\*\*\*\s)$/,
+        handler: ({ state, range }) => {
+          const attributes = {};
+          const { tr } = state;
+          const start = range.from;
+          let end = range.to;
+          
+          tr.insert(start - 1, this.type.create(attributes))
+            .delete(tr.mapping.map(start), tr.mapping.map(end));
+        },
+      }),
+    ];
+  },
+}).configure({
+  HTMLAttributes: {
+    class: "novel-mt-4 novel-mb-6 novel-border-t novel-border-stone-300",
+  },
+})
+```
+
+**Why the extension?** This fixes [issue #3859](https://github.com/ueberdosis/tiptap/pull/3859#issuecomment-1536799740) where typing `---`, `___`, or `***` didn't properly insert horizontal rules.
+
+### Text Formatting Extensions
+
+```tsx
+// From extensions/index.tsx:120-125
+TiptapUnderline,
+TextStyle,
+Color,
+Highlight.configure({
+  multicolor: true,
+})
+```
+
+<CardGroup cols={2}>
+  <Card title="Underline">
+    Adds underline formatting capability
+  </Card>
+  <Card title="TextStyle">
+    Required for color extension to work
+  </Card>
+  <Card title="Color">
+    Allows text color changes
+  </Card>
+  <Card title="Highlight">
+    Multi-color text highlighting
+  </Card>
+</CardGroup>
+
+### Link Extension
+
+```tsx
+// From extensions/index.tsx:89-94
+TiptapLink.configure({
+  HTMLAttributes: {
+    class: "novel-text-stone-400 novel-underline novel-underline-offset-[3px] hover:novel-text-stone-600 novel-transition-colors novel-cursor-pointer",
+  },
+})
+```
+
+Adds clickable links with styled hover states.
+
+### Image Extensions
+
+Novel includes **two** image extensions:
+
+```tsx
+// From extensions/index.tsx:95-109
+TiptapImage.extend({
+  addProseMirrorPlugins() {
+    return [UploadImagesPlugin()];
+  },
+}).configure({
+  allowBase64: true,
+  HTMLAttributes: {
+    class: "novel-rounded-lg novel-border novel-border-stone-200",
+  },
+}),
+UpdatedImage.configure({
+  HTMLAttributes: {
+    class: "novel-rounded-lg novel-border novel-border-stone-200",
+  },
+})
+```
+
+**Why two image extensions?**
+- **TiptapImage (extended)**: Adds `UploadImagesPlugin` for handling image uploads, supports base64
+- **UpdatedImage**: Custom extension for enhanced image capabilities
+
+Both render with rounded corners and borders for consistent styling.
+
+### Task List Extensions
+
+```tsx
+// From extensions/index.tsx:126-136
+TaskList.configure({
+  HTMLAttributes: {
+    class: "novel-not-prose novel-pl-2",
+  },
+}),
+TaskItem.configure({
+  HTMLAttributes: {
+    class: "novel-flex novel-items-start novel-my-4",
+  },
+  nested: true,
+})
+```
+
+Enables interactive checkboxes with support for nested task lists.
+
+### Placeholder Extension
+
+```tsx
+// From extensions/index.tsx:110-118
+Placeholder.configure({
+  placeholder: ({ node }) => {
+    if (node.type.name === "heading") {
+      return `Heading ${node.attrs.level}`;
+    }
+    return "Press '/' for commands, or '++' for AI autocomplete...";
+  },
+  includeChildren: true,
+})
+```
+
+**Smart placeholders:**
+- Shows "Heading 1", "Heading 2", etc. in heading blocks
+- Shows slash command and AI hints in empty paragraphs
+- `includeChildren: true` shows placeholders in nested blocks
+
+### Markdown Extension
+
+```tsx
+// From extensions/index.tsx:137-141
+Markdown.configure({
+  html: false,
+  transformCopiedText: true,
+  transformPastedText: true,
+})
+```
+
+**Enables bidirectional Markdown:**
+- Converts Markdown to rich text when pasted
+- Converts rich text to Markdown when copied
+- Disables raw HTML for security
+
+<Tip>
+You can access the Markdown content via `editor.storage.markdown.getMarkdown()`
+</Tip>
+
+### Custom Novel Extensions
+
+Novel includes three custom-built extensions:
+
+#### 1. SlashCommand
+
+```tsx
+// From extensions/index.tsx:119
+SlashCommand
+```
+
+Pressing `/` opens a command menu for inserting blocks and triggering AI features. See `extensions/slash-command.tsx:48-76` for implementation.
+
+**Available commands:**
+- Continue writing (AI)
+- Ask a question AI
+- Headings (1-3)
+- Bullet/numbered lists
+- To-do lists
+- Quotes
+- Code blocks
+- Images
+
+<Note>
+SlashCommand uses Tiptap's `Suggestion` utility under the hood to create a pop-up menu with keyboard navigation.
+</Note>
+
+#### 2. CustomKeymap
+
+```tsx
+// From extensions/index.tsx:142
+CustomKeymap
+```
+
+Enhances the default Cmd/Ctrl+A behavior:
+
+```tsx
+// From extensions/custom-keymap.ts:36-52
+addKeyboardShortcuts() {
+  return {
+    "Mod-a": ({ editor }) => {
+      const { state } = editor;
+      const { tr } = state;
+      const startSelectionPos = tr.selection.from;
+      const endSelectionPos = tr.selection.to;
+      const startNodePos = tr.selection.$from.start();
+      const endNodePos = tr.selection.$to.end();
+      
+      const isCurrentTextSelectionNotExtendedToNodeBoundaries =
+        startSelectionPos > startNodePos || endSelectionPos < endNodePos;
+      
+      if (isCurrentTextSelectionNotExtendedToNodeBoundaries) {
+        editor.chain().selectTextWithinNodeBoundaries().run();
+        return true;
+      }
+      return false;
+    },
+  };
+}
+```
+
+**Why this matters:** First Cmd+A selects text within the current node (e.g., paragraph), second Cmd+A selects all. This matches user expectations from apps like Notion.
+
+#### 3. DragAndDrop
+
+```tsx
+// From extensions/index.tsx:143
+DragAndDrop
+```
+
+Enables drag-and-drop reordering of blocks.
+
+## Adding Custom Extensions
+
+You can extend Novel with your own or third-party extensions:
+
+```tsx
+import { Editor } from "novel";
+import { Mathematics } from "@tiptap-pro/extension-mathematics";
+import CustomExtension from "./my-extension";
+
+function MyEditor() {
+  return (
+    <Editor
+      extensions={[
+        Mathematics.configure({
+          // config
+        }),
+        CustomExtension,
+      ]}
+    />
+  );
+}
+```
+
+<Warning>
+Extensions are merged as `[...defaultExtensions, ...extensions]`. If you pass an extension with the same name as a default, the default takes precedence. To override, you must filter out the default extension first.
+</Warning>
+
+### Overriding Default Extensions
+
+If you need to replace a default extension:
+
+```tsx
+import { Editor, defaultExtensions } from "novel";
+import CustomLink from "./custom-link";
+
+const filteredExtensions = defaultExtensions.filter(
+  (ext) => ext.name !== "link"
+);
+
+function MyEditor() {
+  return (
+    <Editor
+      extensions={[...filteredExtensions, CustomLink]}
+    />
+  );
+}
+```
+
+## Extension Configuration Deep Dive
+
+### How Extensions Are Merged
+
+From `index.tsx:99`:
+
+```tsx
+const editor = useEditor({
+  extensions: [...defaultExtensions, ...extensions],
+  // ...
+});
+```
+
+The spread operator creates a new array with defaults first, then your customs. Tiptap processes them in order.
+
+### Extension Priority
+
+Extensions can define priority to control ordering:
+
+```tsx
+const MyExtension = Extension.create({
+  name: 'myExtension',
+  priority: 1000, // Higher = processed first
+  // ...
+});
+```
+
+<Info>
+Most default extensions don't set explicit priority, so they use Tiptap's default (100).
+</Info>
+
+## Extension Capabilities
+
+Tiptap extensions can:
+
+- **Add nodes** (block-level content like paragraphs, headings)
+- **Add marks** (inline formatting like bold, links)
+- **Add commands** (programmatic actions)
+- **Add keyboard shortcuts**
+- **Add input rules** (auto-formatting as you type)
+- **Add paste rules** (transform pasted content)
+- **Add ProseMirror plugins** (low-level editor behavior)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="AI Completions" icon="sparkles" href="/concepts/ai-completions">
+    See how SlashCommand integrates with AI
+  </Card>
+  <Card title="Editor Component" icon="code" href="/concepts/editor-component">
+    Learn how extensions are loaded into the editor
+  </Card>
+</CardGroup>

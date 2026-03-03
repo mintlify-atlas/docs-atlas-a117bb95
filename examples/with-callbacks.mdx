@@ -1,0 +1,272 @@
+---
+title: With Callbacks
+description: Use onUpdate and onDebouncedUpdate callbacks to handle content changes and implement autosave
+---
+
+## Overview
+
+The Novel editor provides two callback props for handling content updates:
+- `onUpdate` - Called immediately on every change
+- `onDebouncedUpdate` - Called after the user stops typing (debounced)
+
+These callbacks are perfect for implementing autosave, tracking changes, or syncing content with a backend.
+
+## Basic Callbacks Example
+
+```tsx
+import { Editor } from "novel";
+import { Editor as TiptapEditor } from "@tiptap/core";
+
+export default function EditorWithCallbacks() {
+  const handleUpdate = (editor?: TiptapEditor) => {
+    console.log("Content updated!");
+    console.log("Current content:", editor?.getJSON());
+  };
+
+  const handleDebouncedUpdate = (editor?: TiptapEditor) => {
+    console.log("Debounced update - user stopped typing");
+    console.log("Saving content:", editor?.getJSON());
+  };
+
+  return (
+    <Editor
+      onUpdate={handleUpdate}
+      onDebouncedUpdate={handleDebouncedUpdate}
+    />
+  );
+}
+```
+
+## Autosave Implementation
+
+Here's a real-world example implementing autosave with visual save status, based on the Novel demo app:
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Editor } from "novel";
+
+export default function AutosaveEditor() {
+  const [saveStatus, setSaveStatus] = useState("Saved");
+
+  return (
+    <div className="relative w-full max-w-screen-lg">
+      <div className="absolute right-5 top-5 z-10 mb-5 rounded-lg bg-stone-100 px-2 py-1 text-sm text-stone-400">
+        {saveStatus}
+      </div>
+      <Editor
+        onUpdate={() => {
+          setSaveStatus("Unsaved");
+        }}
+        onDebouncedUpdate={() => {
+          setSaveStatus("Saving...");
+          // Simulate a delay in saving.
+          setTimeout(() => {
+            setSaveStatus("Saved");
+          }, 500);
+        }}
+      />
+    </div>
+  );
+}
+```
+
+This example shows a save status indicator that updates as the user types:
+1. User types → Status changes to "Unsaved" (via `onUpdate`)
+2. User stops typing for 750ms → Status changes to "Saving..." (via `onDebouncedUpdate`)
+3. Save completes → Status changes to "Saved"
+
+## Save to Backend
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Editor } from "novel";
+import { Editor as TiptapEditor } from "@tiptap/core";
+
+export default function BackendSaveEditor() {
+  const [saveStatus, setSaveStatus] = useState("Saved");
+  const [documentId] = useState("doc-123"); // Your document ID
+
+  const saveToBackend = async (editor?: TiptapEditor) => {
+    if (!editor) return;
+
+    setSaveStatus("Saving...");
+
+    try {
+      const content = editor.getJSON();
+      
+      const response = await fetch(`/api/documents/${documentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+
+      if (!response.ok) throw new Error("Failed to save");
+      
+      setSaveStatus("Saved");
+    } catch (error) {
+      console.error("Save error:", error);
+      setSaveStatus("Error saving");
+    }
+  };
+
+  return (
+    <div className="relative w-full max-w-screen-lg">
+      <div className="absolute right-5 top-5 z-10 mb-5 rounded-lg bg-stone-100 px-2 py-1 text-sm text-stone-400">
+        {saveStatus}
+      </div>
+      <Editor
+        onUpdate={() => setSaveStatus("Unsaved")}
+        onDebouncedUpdate={saveToBackend}
+        debounceDuration={1000} // Wait 1 second after user stops typing
+        storageKey={`document-${documentId}`}
+      />
+    </div>
+  );
+}
+```
+
+## Custom Debounce Duration
+
+Control how long to wait after the user stops typing before triggering `onDebouncedUpdate`:
+
+```tsx
+import { Editor } from "novel";
+
+export default function CustomDebounce() {
+  return (
+    <Editor
+      onDebouncedUpdate={(editor) => {
+        console.log("User stopped typing for 2 seconds");
+      }}
+      debounceDuration={2000} // 2 seconds
+    />
+  );
+}
+```
+
+Default debounce duration is 750ms.
+
+## Accessing Editor Content
+
+The editor instance passed to callbacks provides several methods to access content:
+
+```tsx
+import { Editor } from "novel";
+import { Editor as TiptapEditor } from "@tiptap/core";
+
+export default function ContentAccessExample() {
+  const handleUpdate = (editor?: TiptapEditor) => {
+    if (!editor) return;
+
+    // Get JSON representation
+    const json = editor.getJSON();
+    console.log("JSON:", json);
+
+    // Get HTML
+    const html = editor.getHTML();
+    console.log("HTML:", html);
+
+    // Get plain text
+    const text = editor.getText();
+    console.log("Text:", text);
+
+    // Check if editor is empty
+    const isEmpty = editor.isEmpty;
+    console.log("Is empty:", isEmpty);
+  };
+
+  return <Editor onUpdate={handleUpdate} />;
+}
+```
+
+## Disable Local Storage
+
+If you're saving to a backend and don't want local storage persistence:
+
+```tsx
+import { Editor } from "novel";
+
+export default function NoLocalStorageEditor() {
+  return (
+    <Editor
+      disableLocalStorage={true}
+      onDebouncedUpdate={(editor) => {
+        // Save to your backend instead
+        saveToBackend(editor?.getJSON());
+      }}
+    />
+  );
+}
+```
+
+<Tip>
+  When `disableLocalStorage` is `false` (default), the `onDebouncedUpdate` callback is called AND content is saved to localStorage. When `true`, only your callback is executed.
+</Tip>
+
+## Error Handling
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Editor } from "novel";
+import { Editor as TiptapEditor } from "@tiptap/core";
+
+export default function ErrorHandlingEditor() {
+  const [saveStatus, setSaveStatus] = useState("Saved");
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async (editor?: TiptapEditor) => {
+    if (!editor) return;
+
+    setSaveStatus("Saving...");
+    setError(null);
+
+    try {
+      const response = await fetch("/api/save", {
+        method: "POST",
+        body: JSON.stringify({ content: editor.getJSON() }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save document");
+      }
+
+      setSaveStatus("Saved");
+    } catch (err) {
+      setSaveStatus("Error");
+      setError(err instanceof Error ? err.message : "Unknown error");
+      
+      // Optionally retry after a delay
+      setTimeout(() => handleSave(editor), 5000);
+    }
+  };
+
+  return (
+    <div className="relative w-full max-w-screen-lg">
+      <div className="absolute right-5 top-5 z-10 flex gap-2">
+        <div className="rounded-lg bg-stone-100 px-2 py-1 text-sm text-stone-400">
+          {saveStatus}
+        </div>
+        {error && (
+          <div className="rounded-lg bg-red-100 px-2 py-1 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+      </div>
+      <Editor
+        onUpdate={() => setSaveStatus("Unsaved")}
+        onDebouncedUpdate={handleSave}
+      />
+    </div>
+  );
+}
+```
+
+<Tip>
+  The `onUpdate` callback fires on every keystroke, so avoid heavy operations there. Use `onDebouncedUpdate` for API calls, database saves, and other expensive operations.
+</Tip>

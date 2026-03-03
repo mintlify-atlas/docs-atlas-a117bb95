@@ -1,0 +1,641 @@
+---
+title: Custom Extensions
+description: Learn how to create custom Tiptap extensions for Novel
+---
+
+Novel is built on top of Tiptap, which means you can add custom extensions to enhance the editor's functionality. This guide shows you how to create and integrate custom extensions.
+
+## Adding Extensions to Novel
+
+The `Editor` component accepts an `extensions` prop that allows you to add custom Tiptap extensions:
+
+```tsx
+import { Editor } from "novel";
+import { MyCustomExtension } from "./my-custom-extension";
+
+export default function MyEditor() {
+  return <Editor extensions={[MyCustomExtension]} />;
+}
+```
+
+<Note>
+Your custom extensions will be added to Novel's default extensions, not replace them.
+</Note>
+
+## Example: Custom Keymap Extension
+
+Here's a real example from Novel's source code showing a custom keymap extension:
+
+```ts
+import { Extension } from "@tiptap/core";
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    customkeymap: {
+      /**
+       * Select text between node boundaries
+       */
+      selectTextWithinNodeBoundaries: () => ReturnType;
+    };
+  }
+}
+
+const CustomKeymap = Extension.create({
+  name: "CustomKeymap",
+
+  addCommands() {
+    return {
+      selectTextWithinNodeBoundaries:
+        () =>
+        ({ editor, commands }) => {
+          const { state } = editor;
+          const { tr } = state;
+          const startNodePos = tr.selection.$from.start();
+          const endNodePos = tr.selection.$to.end();
+          return commands.setTextSelection({
+            from: startNodePos,
+            to: endNodePos,
+          });
+        },
+    };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      "Mod-a": ({ editor }) => {
+        const { state } = editor;
+        const { tr } = state;
+        const startSelectionPos = tr.selection.from;
+        const endSelectionPos = tr.selection.to;
+        const startNodePos = tr.selection.$from.start();
+        const endNodePos = tr.selection.$to.end();
+        const isCurrentTextSelectionNotExtendedToNodeBoundaries =
+          startSelectionPos > startNodePos || endSelectionPos < endNodePos;
+        if (isCurrentTextSelectionNotExtendedToNodeBoundaries) {
+          editor.chain().selectTextWithinNodeBoundaries().run();
+          return true;
+        }
+        return false;
+      },
+    };
+  },
+});
+
+export default CustomKeymap;
+```
+
+This extension enhances the `Cmd/Ctrl + A` behavior to first select text within the current node before selecting all content.
+
+## Example: Drag and Drop Extension
+
+Here's how Novel implements drag and drop functionality:
+
+<Steps>
+
+### Step 1: Create the Extension
+
+```tsx
+import { Extension } from "@tiptap/core";
+import { Plugin } from "@tiptap/pm/state";
+import { EditorView } from "@tiptap/pm/view";
+
+export interface DragHandleOptions {
+  dragHandleWidth: number;
+}
+
+const DragAndDrop = Extension.create<DragHandleOptions>({
+  name: "dragAndDrop",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        view: (view) => {
+          const dragHandleElement = document.createElement("div");
+          dragHandleElement.draggable = true;
+          dragHandleElement.dataset.dragHandle = "";
+          dragHandleElement.classList.add("drag-handle");
+          
+          dragHandleElement.addEventListener("dragstart", (e) => {
+            handleDragStart(e, view);
+          });
+          
+          view?.dom?.parentElement?.appendChild(dragHandleElement);
+
+          return {
+            destroy: () => {
+              dragHandleElement?.remove?.();
+            },
+          };
+        },
+        props: {
+          handleDOMEvents: {
+            mousemove: (view, event) => {
+              // Show/hide drag handle based on mouse position
+            },
+            dragstart: (view) => {
+              view.dom.classList.add("dragging");
+            },
+            drop: (view) => {
+              view.dom.classList.remove("dragging");
+            },
+          },
+        },
+      }),
+    ];
+  },
+});
+
+export default DragAndDrop;
+```
+
+### Step 2: Add to Editor
+
+```tsx
+import DragAndDrop from "./drag-and-drop";
+
+<Editor extensions={[DragAndDrop]} />;
+```
+
+</Steps>
+
+## Creating a Custom Node Extension
+
+Here's how to create a custom node type:
+
+<Tabs>
+  <Tab title="Basic Node">
+    ```ts
+    import { Node } from "@tiptap/core";
+
+    const CustomCallout = Node.create({
+      name: "customCallout",
+
+      group: "block",
+
+      content: "block+",
+
+      parseHTML() {
+        return [
+          {
+            tag: "div[data-type=\"custom-callout\"]",
+          },
+        ];
+      },
+
+      renderHTML({ HTMLAttributes }) {
+        return [
+          "div",
+          {
+            ...HTMLAttributes,
+            "data-type": "custom-callout",
+            class: "callout",
+          },
+          0,
+        ];
+      },
+
+      addCommands() {
+        return {
+          setCallout:
+            () =>
+            ({ commands }) => {
+              return commands.wrapIn(this.name);
+            },
+        };
+      },
+    });
+
+    export default CustomCallout;
+    ```
+  </Tab>
+
+  <Tab title="Node with Attributes">
+    ```ts
+    import { Node } from "@tiptap/core";
+
+    const CustomBox = Node.create({
+      name: "customBox",
+
+      group: "block",
+
+      content: "block+",
+
+      addAttributes() {
+        return {
+          color: {
+            default: "blue",
+            parseHTML: (element) => element.getAttribute("data-color"),
+            renderHTML: (attributes) => {
+              return {
+                "data-color": attributes.color,
+              };
+            },
+          },
+        };
+      },
+
+      parseHTML() {
+        return [
+          {
+            tag: "div[data-type=\"custom-box\"]",
+          },
+        ];
+      },
+
+      renderHTML({ HTMLAttributes }) {
+        return [
+          "div",
+          {
+            ...HTMLAttributes,
+            "data-type": "custom-box",
+            class: `custom-box custom-box-${HTMLAttributes["data-color"]}`,
+          },
+          0,
+        ];
+      },
+
+      addCommands() {
+        return {
+          setCustomBox:
+            (attributes) =>
+            ({ commands }) => {
+              return commands.wrapIn(this.name, attributes);
+            },
+        };
+      },
+    });
+
+    export default CustomBox;
+    ```
+  </Tab>
+
+  <Tab title="React Node View">
+    ```tsx
+    import { Node } from "@tiptap/core";
+    import { ReactNodeViewRenderer } from "@tiptap/react";
+    import { NodeViewWrapper } from "@tiptap/react";
+
+    const CustomComponent = () => {
+      return (
+        <NodeViewWrapper className="custom-component">
+          <div className="content">
+            <h3>Custom React Component</h3>
+            <p>This is rendered with React!</p>
+          </div>
+        </NodeViewWrapper>
+      );
+    };
+
+    const CustomReactNode = Node.create({
+      name: "customReactNode",
+
+      group: "block",
+
+      atom: true,
+
+      parseHTML() {
+        return [
+          {
+            tag: "div[data-type=\"custom-react-node\"]",
+          },
+        ];
+      },
+
+      renderHTML({ HTMLAttributes }) {
+        return ["div", { ...HTMLAttributes, "data-type": "custom-react-node" }];
+      },
+
+      addNodeView() {
+        return ReactNodeViewRenderer(CustomComponent);
+      },
+
+      addCommands() {
+        return {
+          insertCustomReactNode:
+            () =>
+            ({ commands }) => {
+              return commands.insertContent({
+                type: this.name,
+              });
+            },
+        };
+      },
+    });
+
+    export default CustomReactNode;
+    ```
+  </Tab>
+</Tabs>
+
+## Creating a Mark Extension
+
+Marks are used for inline formatting:
+
+```ts
+import { Mark } from "@tiptap/core";
+
+const CustomHighlight = Mark.create({
+  name: "customHighlight",
+
+  addAttributes() {
+    return {
+      color: {
+        default: "yellow",
+        parseHTML: (element) => element.getAttribute("data-color"),
+        renderHTML: (attributes) => {
+          return {
+            "data-color": attributes.color,
+            style: `background-color: ${attributes.color}`,
+          };
+        },
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "mark",
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["mark", HTMLAttributes, 0];
+  },
+
+  addCommands() {
+    return {
+      setCustomHighlight:
+        (attributes) =>
+        ({ commands }) => {
+          return commands.setMark(this.name, attributes);
+        },
+      toggleCustomHighlight:
+        (attributes) =>
+        ({ commands }) => {
+          return commands.toggleMark(this.name, attributes);
+        },
+    };
+  },
+});
+
+export default CustomHighlight;
+```
+
+## Extending Existing Extensions
+
+You can extend Novel's default extensions:
+
+```ts
+import TiptapImage from "@tiptap/extension-image";
+import { Plugin } from "@tiptap/pm/state";
+
+const CustomImage = TiptapImage.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      caption: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-caption"),
+        renderHTML: (attributes) => {
+          if (!attributes.caption) {
+            return {};
+          }
+          return {
+            "data-caption": attributes.caption,
+          };
+        },
+      },
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      ...(this.parent?.() || []),
+      new Plugin({
+        // Your custom plugin logic
+      }),
+    ];
+  },
+});
+
+export default CustomImage;
+```
+
+## Adding to Slash Command
+
+To add your custom extension to the slash command menu, you'll need to create a custom slash command extension. Here's an example:
+
+```tsx
+import { Extension } from "@tiptap/core";
+import Suggestion from "@tiptap/suggestion";
+
+const CustomSlashCommand = Extension.create({
+  name: "custom-slash-command",
+
+  addOptions() {
+    return {
+      suggestion: {
+        char: "/",
+        items: ({ query }) => {
+          return [
+            {
+              title: "Custom Callout",
+              description: "Insert a custom callout box",
+              icon: <BoxIcon />,
+              command: ({ editor, range }) => {
+                editor
+                  .chain()
+                  .focus()
+                  .deleteRange(range)
+                  .setCallout()
+                  .run();
+              },
+            },
+            // ... other items
+          ];
+        },
+      },
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      Suggestion({
+        editor: this.editor,
+        ...this.options.suggestion,
+      }),
+    ];
+  },
+});
+```
+
+<Warning>
+Be careful when extending default extensions. Make sure to call `this.parent?.()` to preserve the parent's functionality.
+</Warning>
+
+## Default Extensions Reference
+
+Novel includes these default extensions:
+
+- `StarterKit` (with custom configurations)
+- `HorizontalRule`
+- `TiptapLink`
+- `TiptapImage` (with upload plugin)
+- `UpdatedImage`
+- `Placeholder`
+- `SlashCommand`
+- `TiptapUnderline`
+- `TextStyle`
+- `Color`
+- `Highlight`
+- `TaskList`
+- `TaskItem`
+- `Markdown`
+- `CustomKeymap`
+- `DragAndDrop`
+
+<Tip>
+You can view the complete default extensions configuration in the Novel source code at `packages/core/src/ui/editor/extensions/index.tsx`
+</Tip>
+
+## Complete Example
+
+Here's a complete example of creating and using a custom extension:
+
+```tsx
+// extensions/custom-mention.ts
+import { Node } from "@tiptap/core";
+import { PluginKey } from "@tiptap/pm/state";
+import Suggestion, { SuggestionOptions } from "@tiptap/suggestion";
+
+export const MentionPluginKey = new PluginKey("mention");
+
+const CustomMention = Node.create({
+  name: "mention",
+
+  group: "inline",
+
+  inline: true,
+
+  selectable: false,
+
+  atom: true,
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-id"),
+        renderHTML: (attributes) => {
+          if (!attributes.id) {
+            return {};
+          }
+          return {
+            "data-id": attributes.id,
+          };
+        },
+      },
+      label: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-label"),
+        renderHTML: (attributes) => {
+          if (!attributes.label) {
+            return {};
+          }
+          return {
+            "data-label": attributes.label,
+          };
+        },
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "span[data-mention]",
+      },
+    ];
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      "span",
+      {
+        ...HTMLAttributes,
+        "data-mention": "",
+        class: "mention",
+      },
+      `@${node.attrs.label}`,
+    ];
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Backspace: () =>
+        this.editor.commands.command(({ tr, state }) => {
+          let isMention = false;
+          const { selection } = state;
+          const { empty, anchor } = selection;
+
+          if (!empty) {
+            return false;
+          }
+
+          state.doc.nodesBetween(anchor - 1, anchor, (node, pos) => {
+            if (node.type.name === this.name) {
+              isMention = true;
+              tr.insertText(
+                this.options.suggestion.char || "",
+                pos,
+                pos + node.nodeSize
+              );
+              return false;
+            }
+          });
+
+          return isMention;
+        }),
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      Suggestion({
+        editor: this.editor,
+        ...this.options.suggestion,
+      }),
+    ];
+  },
+});
+
+export default CustomMention;
+
+// app/editor.tsx
+import { Editor } from "novel";
+import CustomMention from "./extensions/custom-mention";
+
+export default function MyEditor() {
+  return (
+    <Editor
+      extensions={[
+        CustomMention.configure({
+          suggestion: {
+            char: "@",
+            items: async ({ query }) => {
+              return [
+                { id: 1, label: "John Doe" },
+                { id: 2, label: "Jane Smith" },
+              ].filter((item) =>
+                item.label.toLowerCase().includes(query.toLowerCase())
+              );
+            },
+          },
+        }),
+      ]}
+    />
+  );
+}
+```

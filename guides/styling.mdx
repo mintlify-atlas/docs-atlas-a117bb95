@@ -1,0 +1,522 @@
+---
+title: Styling
+description: Learn how to customize the appearance of Novel editor and its components
+---
+
+Novel uses Tailwind CSS with a custom design system. This guide shows you how to style the editor and its components.
+
+## CSS Architecture
+
+Novel includes three main CSS files:
+
+1. `index.css` - CSS variables and theme colors
+2. `tailwind.css` - Tailwind directives
+3. `prosemirror.css` - ProseMirror-specific styles
+
+All classes are prefixed with `novel-` to avoid conflicts with your application's styles.
+
+## Custom CSS Variables
+
+Novel defines a comprehensive set of CSS variables for theming:
+
+```css
+:root {
+  --novel-black: rgb(0 0 0);
+  --novel-white: rgb(255 255 255);
+  --novel-stone-50: rgb(250 250 249);
+  --novel-stone-100: rgb(245 245 244);
+  --novel-stone-200: rgb(231 229 228);
+  --novel-stone-300: rgb(214 211 209);
+  --novel-stone-400: rgb(168 162 158);
+  --novel-stone-500: rgb(120 113 108);
+  --novel-stone-600: rgb(87 83 78);
+  --novel-stone-700: rgb(68 64 60);
+  --novel-stone-800: rgb(41 37 36);
+  --novel-stone-900: rgb(28 25 23);
+
+  --novel-highlight-default: #ffffff;
+  --novel-highlight-purple: #f6f3f8;
+  --novel-highlight-red: #fdebeb;
+  --novel-highlight-yellow: #fbf4a2;
+  --novel-highlight-blue: #c1ecf9;
+  --novel-highlight-green: #acf79f;
+  --novel-highlight-orange: #faebdd;
+  --novel-highlight-pink: #faf1f5;
+  --novel-highlight-gray: #f1f1ef;
+
+  --font-title: "Cal Sans", sans-serif;
+}
+```
+
+## Dark Mode
+
+Novel includes dark mode support with automatic variable swapping:
+
+<Tabs>
+  <Tab title="Setup">
+    Add the `dark-theme` class to enable dark mode:
+
+    ```tsx
+    <div className="dark-theme">
+      <Editor />
+    </div>
+    ```
+  </Tab>
+
+  <Tab title="Variables">
+    Dark mode CSS variables:
+
+    ```css
+    .dark-theme {
+      --novel-black: rgb(255 255 255);
+      --novel-white: rgb(25 25 25);
+      --novel-stone-50: rgb(35 35 34);
+      --novel-stone-100: rgb(41 37 36);
+      --novel-stone-200: rgb(66 69 71);
+      --novel-stone-300: rgb(112 118 123);
+      --novel-stone-400: rgb(160 167 173);
+      --novel-stone-500: rgb(193 199 204);
+      --novel-stone-600: rgb(212 217 221);
+      --novel-stone-700: rgb(229 232 235);
+      --novel-stone-800: rgb(232 234 235);
+      --novel-stone-900: rgb(240, 240, 241);
+
+      --novel-highlight-default: #000000;
+      --novel-highlight-purple: #3f2c4b;
+      --novel-highlight-red: #5c1a1a;
+      --novel-highlight-yellow: #5c4b1a;
+      --novel-highlight-blue: #1a3d5c;
+      --novel-highlight-green: #1a5c20;
+      --novel-highlight-orange: #5c3a1a;
+      --novel-highlight-pink: #5c1a3a;
+      --novel-highlight-gray: #3a3a3a;
+    }
+    ```
+  </Tab>
+
+  <Tab title="Next.js Theme">
+    Using with next-themes:
+
+    ```tsx
+    "use client";
+
+    import { Editor } from "novel";
+    import { useTheme } from "next-themes";
+
+    export default function ThemedEditor() {
+      const { theme } = useTheme();
+
+      return (
+        <div className={theme === "dark" ? "dark-theme" : ""}>
+          <Editor />
+        </div>
+      );
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Customizing Colors
+
+You can override the default colors by redefining the CSS variables:
+
+```css
+/* app/globals.css */
+:root {
+  /* Override with your brand colors */
+  --novel-stone-400: rgb(100 116 139); /* slate-500 */
+  --novel-stone-600: rgb(71 85 105); /* slate-600 */
+  
+  /* Custom highlight colors */
+  --novel-highlight-blue: #dbeafe; /* blue-100 */
+  --novel-highlight-green: #dcfce7; /* green-100 */
+}
+```
+
+## Styling the Editor Container
+
+<Steps>
+
+### Step 1: Use the className prop
+
+```tsx
+<Editor className="my-editor" />
+```
+
+### Step 2: Add custom styles
+
+```css
+.my-editor {
+  @apply rounded-2xl border-2 border-blue-200 bg-gray-50 shadow-xl;
+  min-height: 600px;
+}
+```
+
+### Step 3: Style ProseMirror content
+
+```css
+.my-editor .ProseMirror {
+  @apply px-16 py-12 text-lg;
+  font-family: "Georgia", serif;
+}
+```
+
+</Steps>
+
+## ProseMirror Styles
+
+Novel includes comprehensive ProseMirror styles. Here are the key classes you can customize:
+
+```css
+/* Editor container padding */
+.ProseMirror {
+  @apply novel-p-12 novel-px-8 sm:novel-px-12;
+}
+
+/* Placeholder text */
+.ProseMirror .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--novel-stone-400);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Image styles */
+.ProseMirror img {
+  transition: filter 0.1s ease-in-out;
+
+  &:hover {
+    cursor: pointer;
+    filter: brightness(90%);
+  }
+
+  &.ProseMirror-selectednode {
+    outline: 3px solid #5abbf7;
+    filter: brightness(90%);
+  }
+}
+
+/* Image upload placeholder */
+.img-placeholder {
+  position: relative;
+
+  &:before {
+    content: "";
+    box-sizing: border-box;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid var(--novel-stone-200);
+    border-top-color: var(--novel-stone-800);
+    animation: spinning 0.6s linear infinite;
+  }
+}
+
+@keyframes spinning {
+  to {
+    transform: rotate(360deg);
+  }
+}
+```
+
+## Styling Text Elements
+
+Novel uses Tiptap's StarterKit with custom HTML attributes:
+
+```tsx
+// Bullet lists
+bulletList: {
+  HTMLAttributes: {
+    class: "novel-list-disc novel-list-outside novel-leading-3 novel--mt-2",
+  },
+},
+
+// Ordered lists
+orderedList: {
+  HTMLAttributes: {
+    class: "novel-list-decimal novel-list-outside novel-leading-3 novel--mt-2",
+  },
+},
+
+// List items
+listItem: {
+  HTMLAttributes: {
+    class: "novel-leading-normal novel--mb-2",
+  },
+},
+
+// Blockquotes
+blockquote: {
+  HTMLAttributes: {
+    class: "novel-border-l-4 novel-border-stone-700",
+  },
+},
+
+// Code blocks
+codeBlock: {
+  HTMLAttributes: {
+    class: "novel-rounded-sm novel-bg-stone-100 novel-p-5 novel-font-mono novel-font-medium novel-text-stone-800",
+  },
+},
+
+// Inline code
+code: {
+  HTMLAttributes: {
+    class: "novel-rounded-md novel-bg-stone-200 novel-px-1.5 novel-py-1 novel-font-mono novel-font-medium novel-text-stone-900",
+    spellcheck: "false",
+  },
+},
+```
+
+To override these styles, create more specific CSS selectors:
+
+```css
+.my-editor .ProseMirror blockquote {
+  @apply border-l-4 border-blue-500 pl-4 italic text-gray-700;
+}
+
+.my-editor .ProseMirror code {
+  @apply bg-purple-100 text-purple-800 px-2 py-1 rounded;
+}
+
+.my-editor .ProseMirror pre code {
+  @apply bg-gray-900 text-gray-100 block p-4 rounded-lg;
+}
+```
+
+## Styling the Bubble Menu
+
+The bubble menu appears when text is selected:
+
+```css
+/* Target the bubble menu container */
+.novel-bubble-menu {
+  @apply rounded-lg border bg-white shadow-xl;
+}
+
+/* Style individual buttons */
+.novel-bubble-menu button {
+  @apply px-3 py-2 hover:bg-gray-100 transition-colors;
+}
+
+.novel-bubble-menu button.is-active {
+  @apply bg-blue-100 text-blue-600;
+}
+```
+
+## Drag Handle Styling
+
+Customize the drag handle that appears on the left of blocks:
+
+```css
+.drag-handle {
+  position: fixed;
+  opacity: 1;
+  transition: opacity ease-in 0.2s;
+  border-radius: 0.25rem;
+  width: 1.2rem;
+  height: 1.5rem;
+  z-index: 50;
+  cursor: grab;
+
+  &:hover {
+    background-color: var(--novel-stone-100);
+    transition: background-color 0.2s;
+  }
+
+  &:active {
+    background-color: var(--novel-stone-200);
+    transition: background-color 0.2s;
+  }
+
+  &.hide {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+```
+
+## Task List Styling
+
+Novel includes custom checkbox styles for task lists:
+
+```css
+ul[data-type="taskList"] li > label input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--novel-white);
+  margin: 0;
+  cursor: pointer;
+  width: 1.2em;
+  height: 1.2em;
+  position: relative;
+  top: 5px;
+  border: 2px solid var(--novel-stone-900);
+  margin-right: 0.3rem;
+  display: grid;
+  place-content: center;
+
+  &:hover {
+    background-color: var(--novel-stone-50);
+  }
+
+  &:active {
+    background-color: var(--novel-stone-200);
+  }
+
+  &::before {
+    content: "";
+    width: 0.65em;
+    height: 0.65em;
+    transform: scale(0);
+    transition: 120ms transform ease-in-out;
+    box-shadow: inset 1em 1em;
+    transform-origin: center;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  }
+
+  &:checked::before {
+    transform: scale(1);
+  }
+}
+
+ul[data-type="taskList"] li[data-checked="true"] > div > p {
+  color: var(--novel-stone-400);
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+```
+
+## Custom Fonts
+
+Novel uses the Cal Sans font for headings. You can customize this:
+
+<Steps>
+
+### Step 1: Define your font
+
+```css
+@font-face {
+  font-family: "Your Custom Font";
+  src: url("/fonts/your-font.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+```
+
+### Step 2: Update CSS variable
+
+```css
+:root {
+  --font-title: "Your Custom Font", sans-serif;
+}
+```
+
+### Step 3: Override editor attributes
+
+```tsx
+import { Editor } from "novel";
+import { EditorProps } from "@tiptap/pm/view";
+
+const customEditorProps: EditorProps = {
+  attributes: {
+    class: "prose prose-lg font-serif focus:outline-none",
+  },
+};
+
+<Editor editorProps={customEditorProps} />;
+```
+
+</Steps>
+
+## Responsive Styling
+
+Novel includes responsive styles. Here's how to customize them:
+
+```css
+/* Mobile */
+@media screen and (max-width: 768px) {
+  .ProseMirror {
+    @apply px-4 py-8;
+  }
+
+  .drag-handle {
+    display: none;
+    pointer-events: none;
+  }
+
+  ul[data-type="taskList"] li > label {
+    margin-right: 0.5rem;
+  }
+}
+
+/* Desktop */
+@media screen and (min-width: 768px) {
+  .ProseMirror {
+    @apply px-12 py-12;
+  }
+}
+```
+
+## Complete Custom Theme Example
+
+Here's a complete example of a custom blue theme:
+
+```css
+/* app/editor-theme.css */
+:root {
+  /* Override color palette */
+  --novel-stone-50: rgb(239 246 255); /* blue-50 */
+  --novel-stone-100: rgb(219 234 254); /* blue-100 */
+  --novel-stone-200: rgb(191 219 254); /* blue-200 */
+  --novel-stone-400: rgb(96 165 250); /* blue-400 */
+  --novel-stone-600: rgb(37 99 235); /* blue-600 */
+  --novel-stone-800: rgb(30 64 175); /* blue-800 */
+  
+  /* Custom highlights */
+  --novel-highlight-blue: rgb(191 219 254);
+  --novel-highlight-default: rgb(255 255 255);
+}
+
+/* Custom editor container */
+.blue-editor {
+  @apply rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white shadow-2xl;
+}
+
+.blue-editor .ProseMirror {
+  @apply text-blue-900;
+}
+
+.blue-editor .ProseMirror blockquote {
+  @apply border-blue-500 bg-blue-50 pl-4 py-2;
+}
+
+.blue-editor .ProseMirror code {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.blue-editor .ProseMirror a {
+  @apply text-blue-600 hover:text-blue-800;
+}
+```
+
+```tsx
+import { Editor } from "novel";
+import "./editor-theme.css";
+
+export default function BlueEditor() {
+  return <Editor className="blue-editor" />;
+}
+```
+
+<Tip>
+Use browser DevTools to inspect Novel's classes and see which styles are applied. This makes it easier to override specific elements.
+</Tip>
+
+<Warning>
+When overriding Novel's default styles, use more specific selectors or `!important` sparingly. It's usually better to work with the CSS variable system.
+</Warning>
