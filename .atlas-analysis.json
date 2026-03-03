@@ -1,0 +1,107 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Novel",
+  "projectDescription": "A Notion-style WYSIWYG editor with AI-powered autocompletions built on Tiptap and React.",
+  "theme": "palm",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/editor-component",
+              "concepts/extensions",
+              "concepts/ai-completions",
+              "concepts/local-storage"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/customization",
+              "guides/ai-integration",
+              "guides/custom-extensions",
+              "guides/styling",
+              "guides/image-uploads"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-usage",
+              "examples/custom-styling",
+              "examples/with-callbacks",
+              "examples/custom-ai-api"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Components",
+            "pages": [
+              "api/editor"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "api/extensions/slash-command",
+              "api/extensions/image-upload",
+              "api/extensions/drag-and-drop",
+              "api/extensions/custom-keymap"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/hooks",
+              "api/utils"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Notion-style WYSIWYG editing experience",
+    "AI-powered text autocompletion with OpenAI",
+    "Slash commands for quick formatting",
+    "Image upload and drag-and-drop support",
+    "Built on Tiptap with extensible architecture",
+    "Local storage persistence",
+    "Markdown support",
+    "Rich text formatting with bubble menu"
+  ],
+  "publicApiSurface": [
+    "Editor component",
+    "completionApi prop",
+    "className prop",
+    "defaultValue prop",
+    "extensions prop",
+    "editorProps prop",
+    "onUpdate callback",
+    "onDebouncedUpdate callback",
+    "debounceDuration prop",
+    "storageKey prop",
+    "disableLocalStorage prop",
+    "defaultExtensions",
+    "defaultEditorProps",
+    "defaultEditorContent"
+  ]
+}
